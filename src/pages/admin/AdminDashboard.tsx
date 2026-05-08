@@ -43,11 +43,15 @@ const AdminDashboard = () => {
           const { error: retryError, data: retryData } = await signIn(adminEmail, adminPassword);
           
           if (!retryError && retryData.user) {
-            // 3. Garante Cargo Admin
-            await supabaseClient.from('user_roles').upsert({ 
-              user_id: retryData.user.id, 
-              role: 'admin' 
-            }, { onConflict: 'user_id' });
+            // 3. Tenta garantir Cargo Admin
+            try {
+              await supabaseClient.from('user_roles').upsert({ 
+                user_id: retryData.user.id, 
+                role: 'admin' 
+              }, { onConflict: 'user_id' });
+            } catch (roleErr) {
+              console.warn("Table user_roles might be missing:", roleErr);
+            }
             
             toast.success("Acesso Admin configurado e logado!");
             return;

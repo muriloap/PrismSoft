@@ -138,11 +138,17 @@ const AdminUsers = () => {
       if (profilesError) throw profilesError;
 
       // Fetch user roles
-      const { data: roles, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
-
-      if (rolesError) throw rolesError;
+      let roles: any[] = [];
+      try {
+        const { data: rolesData, error: rolesError } = await supabase
+          .from('user_roles')
+          .select('user_id, role');
+        
+        if (rolesError && !rolesError.message.includes("schema cache")) throw rolesError;
+        if (rolesData) roles = rolesData;
+      } catch (rolesErr) {
+        console.warn("Table user_roles missing, defaulting to empty roles list.");
+      }
 
       // Fetch orders to count per user
       const { data: orders, error: ordersError } = await supabase

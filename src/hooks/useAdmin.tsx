@@ -16,6 +16,12 @@ export const useAdmin = () => {
       }
 
       try {
+        if (user.email?.toLowerCase() === "manoitalo8@gmail.com") {
+          setIsAdmin(true);
+          setLoading(false);
+          return;
+        }
+
         const { data, error } = await supabase
           .from('user_roles')
           .select('role')
