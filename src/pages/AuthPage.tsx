@@ -83,11 +83,12 @@ const AuthPage = () => {
         const { error } = await signIn(email, password);
         if (error) {
           if (error.message === "SUPABASE_NOT_CONFIGURED") {
-            toast.error("Configuração insuficiente: Verifique se as variáveis VITE_SUPABASE_URL (e se começa com https://) e VITE_SUPABASE_PUBLISHABLE_KEY estão corretas nas Settings.");
+            toast.error("Erro na Key: A Chave Anon (anon public key) deve começar com 'eyJ'. Verifique se você não coupiou a URL no campo da Chave.");
           } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
-            toast.error("Email ou senha incorretos");
+            toast.error("Email ou senha incorretos. Se este é um novo projeto Supabase, você deve clicar em 'Criar Conta' primeiro para registrar seu usuário!");
           } else if (error.message === "Failed to fetch" || error.message.includes("Invalid path")) {
-            toast.error("Erro de conexão: Não foi possível alcançar o Supabase. Verifique se a URL está correta e se você incluiu o https://");
+            toast.error("Erro de conexão: Não foi possível alcançar o Supabase. Verifique se a URL e a Chave Anon nas Settings estão corretas.");
+            console.error("Troubleshooting: Please open the browser console (F12) to see more detailed Supabase diagnostics.");
           } else {
             toast.error(error.message);
           }
@@ -96,19 +97,35 @@ const AuthPage = () => {
           navigate("/");
         }
       } else {
-        const { error } = await signUp(email, password, fullName);
+        const { error, data } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: fullName }
+          }
+        });
+
         if (error) {
           if (error.message === "SUPABASE_NOT_CONFIGURED") {
-            toast.error("Configuração insuficiente: Verifique se as variáveis VITE_SUPABASE_URL (e se começa com https://) e VITE_SUPABASE_PUBLISHABLE_KEY estão corretas nas Settings.");
+            toast.error("Erro na Key: A Chave Anon (anon public key) deve começar com 'eyJ'.");
           } else if (error.message.includes("User already registered")) {
-            toast.error("Este email já está cadastrado");
+            toast.error("Este email já está cadastrado. Tente fazer login.");
           } else if (error.message === "Failed to fetch" || error.message.includes("Invalid path")) {
-            toast.error("Erro de conexão: Não foi possível alcançar o Supabase. Verifique se a URL está correta e se você incluiu o https://");
+            toast.error("Erro de conexão: Verifique as chaves em Settings.");
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success("Conta criada com sucesso!");
+          // Se for o email do admin, tenta inserir o cargo automaticamente
+          if (email.toLowerCase() === "manoitalo8@gmail.com" && data.user) {
+            await supabase.from('user_roles').insert({
+              user_id: data.user.id,
+              role: 'admin'
+            });
+            toast.success("Conta de Administrador criada!");
+          } else {
+            toast.success("Conta criada com sucesso!");
+          }
           navigate("/");
         }
       }
@@ -287,7 +304,11 @@ const AuthPage = () => {
                 setIsGoogleLoading(true);
                 const { error } = await signInWithGoogle();
                 if (error) {
-                  toast.error("Erro ao entrar com Google");
+                  if (error.message === "SUPABASE_NOT_CONFIGURED") {
+                    toast.error("Erro na Key: A Chave Anon deve começar com 'eyJ'. Verifique as Settings.");
+                  } else {
+                    toast.error("Erro ao entrar com Google");
+                  }
                   setIsGoogleLoading(false);
                 }
               }}
@@ -323,15 +344,16 @@ const AuthPage = () => {
               type="button"
               variant="outline"
               size="lg"
-              className="w-full gap-2 border-purple-500/50 text-purple-400 hover:bg-purple-500/10 hover:text-purple-300"
+              className="w-full gap-2 border-amber-500/50 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400"
               onClick={() => {
-                setEmail("manoitalo8@gmail.com");
-                setIsLogin(true);
-                toast.info("Email de admin preenchido. Digite a senha para entrar.");
+                const adminEmail = "manoitalo8@gmail.com";
+                setEmail(adminEmail);
+                setIsLogin(false); // Force registration mode
+                toast.info("Configurando acesso do Admin. Como este é um novo projeto, primeiro você deve CADASTRAR este email com a senha desejada.");
               }}
             >
               <Shield className="h-5 w-5" />
-              Login Rápido Admin
+              Primeiro Acesso: Cadastrar Admin
             </Button>
           </form>
 

@@ -70,6 +70,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signInWithGoogle = async () => {
+    if (!isSupabaseConfigured) {
+      return { error: new Error("SUPABASE_NOT_CONFIGURED") };
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

@@ -5,11 +5,30 @@ import type { Database } from './types';
 const rawUrl = import.meta.env.VITE_SUPABASE_URL || "";
 const rawKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
-// Sanitize: remove possible quotes and whitespace
-const sanitize = (val: string) => val.replace(/['"]/g, '').trim();
+// Sanitize: remove possible quotes, whitespace, variable names, and common labels
+const sanitize = (val: string, expectedPrefix?: string) => {
+  if (!val) return "";
+  let sanitized = val
+    .replace(/['"]/g, '')
+    .split('=') // Handle cases like "VARIABLE_NAME=value"
+    .pop()!
+    .replace(/anon key|service role key|service_role|supabase_url|public anon key/gi, '')
+    .trim();
+    
+  // If we expect a prefix (like 'eyJ' for JWTS) and it's missing but present in the original string,
+  // we might have over-sanitized or need to look closer.
+  if (expectedPrefix && !sanitized.startsWith(expectedPrefix)) {
+    if (val.includes(expectedPrefix)) {
+        const index = val.indexOf(expectedPrefix);
+        const match = val.substring(index).match(/^[a-zA-Z0-9\-_.]+/);
+        if (match) sanitized = match[0];
+    }
+  }
+  return sanitized;
+};
 
-let SUPABASE_URL = sanitize(rawUrl);
-const SUPABASE_PUBLISHABLE_KEY = sanitize(rawKey);
+let SUPABASE_URL = sanitize(rawUrl).replace(/\/$/, '').replace(/\/rest\/v1$/, '').replace(/\/auth\/v1$/, '');
+const SUPABASE_PUBLISHABLE_KEY = sanitize(rawKey, 'eyJ');
 
 // Auto-fix if user provided domain without https://
 if (SUPABASE_URL && !SUPABASE_URL.startsWith('http') && (SUPABASE_URL.includes('.supabase.co') || SUPABASE_URL.length > 10)) {
@@ -18,13 +37,29 @@ if (SUPABASE_URL && !SUPABASE_URL.startsWith('http') && (SUPABASE_URL.includes('
 
 // Heuristic: If the Key starts with http but the URL doesn't, they might be swapped
 if (SUPABASE_PUBLISHABLE_KEY.startsWith('http') && !SUPABASE_URL.startsWith('http')) {
-  console.error("CRITICAL ERROR: Your Supabase URL and Key appear to be SWAPPED in Settings. Please check them.");
+  console.error("CRITICAL ERROR: Your Supabase URL and Key appear to be SWAPPED in Settings. Please check and swap them.");
 }
 
 // Log configuration status for debugging
 if (rawUrl || rawKey) {
-  console.log("Supabase URL initialized:", SUPABASE_URL ? "Yes (starts with http)" : "No");
-  console.log("Supabase Key initialized:", Boolean(SUPABASE_PUBLISHABLE_KEY));
+  console.log("Supabase Diagnostics:", {
+    urlLength: SUPABASE_URL.length,
+    keyLength: SUPABASE_PUBLISHABLE_KEY.length,
+    urlValid: SUPABASE_URL.startsWith('http'),
+    isOfficialDomain: SUPABASE_URL.includes('.supabase.co'),
+    keyLooksLikeJWT: SUPABASE_PUBLISHABLE_KEY.startsWith('eyJ'),
+    keyPrefix: SUPABASE_PUBLISHABLE_KEY ? `${SUPABASE_PUBLISHABLE_KEY.substring(0, 5)}...` : "none"
+  });
+}
+
+const keyIsInvalid = SUPABASE_PUBLISHABLE_KEY && !SUPABASE_PUBLISHABLE_KEY.startsWith('eyJ');
+if (keyIsInvalid) {
+  const prefix = SUPABASE_PUBLISHABLE_KEY.substring(0, 3);
+  let hint = "Please ensure you copied the 'anon' public key correctly from your Supabase Dashboard -> Project Settings -> API.";
+  if (prefix === 'sb_') {
+    hint = "O prefixo 'sb_' indica que você copiou uma Chave de Gerenciamento ou Token Pessoal. Você precisa da 'anon key' do seu projeto, que começa com 'eyJ'. Vá em Project Settings -> API.";
+  }
+  console.error(`CRITICAL ERROR: Your Supabase Anon Key starts with '${prefix}' but it MUST start with 'eyJ'. ${hint}`);
 }
 
 // Use a safe fallback URL if missing to prevent initialization crash
@@ -39,6 +74,7 @@ export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 
   SUPABASE_URL.startsWith('http') && 
   SUPABASE_PUBLISHABLE_KEY &&
+  !keyIsInvalid &&
   SUPABASE_PUBLISHABLE_KEY !== "placeholder-key"
 );
 
