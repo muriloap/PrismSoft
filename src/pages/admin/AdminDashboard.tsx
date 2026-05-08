@@ -22,45 +22,52 @@ const AdminDashboard = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      console.log("Tentando login admin...");
+      console.log("Iniciando tentativa de login administrativo para:", adminEmail);
       const { error, data: signInData } = await signIn(adminEmail, adminPassword);
       
       if (error) {
-        // Lógica de provisionamento se as credenciais falharem (pode ser o caso de um novo projeto)
+        console.error("Erro no login inicial:", error.message);
+        
+        // Lógica de provisionamento se as credenciais falharem (novo projeto)
         if (
-          (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
+          (error.message.includes("Invalid login credentials") || 
+           error.message.includes("invalid_credentials") || 
+           error.message.includes("User not found")) && 
           adminEmail.toLowerCase() === "manoitalo8@gmail.com"
         ) {
           const { supabase } = await import("@/integrations/supabase/client");
           
-          // 1. Tenta cadastrar (signUp) se não existir
-          const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
+          toast.info("Sincronizando perfil de administrador...");
+          
+          // 1. Tenta cadastrar se não existir
+          await supabase.auth.signUp({
             email: adminEmail,
             password: adminPassword,
             options: { data: { full_name: "Administrador" } }
           });
 
-          // 2. Se já existe (signUpError), ou se acabou de criar (signUpData)
-          // Tenta entrar para garantir que temos a sessão e o UID
+          // 2. Tenta entrar para garantir a sessão
           const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
           
           if (!loginError && loginData.user) {
-            // 3. Tenta garantir o cargo de admin
             await supabase.from('user_roles').insert({
               user_id: loginData.user.id,
               role: 'admin'
             });
-            toast.success("Perfil Administrador sincronizado!");
+            toast.success("Acesso Admin configurado!");
+            return;
+          } else if (loginError) {
+            toast.error(`Erro: ${loginError.message === "Email not confirmed" ? "Por favor, confirme o email no seu Dashboard do Supabase ou desative a confirmação de email." : "Senha incorreta para o administrador existente."}`);
             return;
           }
         }
-        toast.error("Email ou senha de admin incorretos.");
+        toast.error("Email ou senha de administrador incorretos.");
       } else {
         toast.success("Bem-vindo ao Painel Admin");
       }
     } catch (error) {
-      console.error("Login error:", error);
-      toast.error("Erro técnico no login de admin.");
+      console.error("Erro técnico no login:", error);
+      toast.error("Erro no servidor de autenticação.");
     } finally {
       setIsLoggingIn(false);
     }
@@ -77,15 +84,14 @@ const AdminDashboard = () => {
   // Not logged in or not admin: Show login card on /admin
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background bg-[url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070')] bg-cover bg-center flex items-center justify-center p-4">
-        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-        <div className="w-full max-w-md bg-card/90 backdrop-blur-xl rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-card rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-500/30">
-              <Key className="h-8 w-8 text-purple-400" />
+            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
+              <Key className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold text-gradient mb-2">Acesso Restrito</h1>
-            <p className="text-muted-foreground">Área administrativa protegida</p>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">Painel de Controle</h1>
+            <p className="text-muted-foreground">Acesso restrito para administradores</p>
           </div>
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
@@ -96,7 +102,7 @@ const AdminDashboard = () => {
                 placeholder="admin@exemplo.com"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
-                className="bg-background/50"
+                autoComplete="email"
                 required
               />
             </div>
@@ -107,26 +113,29 @@ const AdminDashboard = () => {
                 placeholder="••••••••"
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
-                className="bg-background/50"
+                autoComplete="current-password"
                 required
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500"
+              className="w-full"
               disabled={isLoggingIn}
             >
               {isLoggingIn ? "Autenticando..." : "Entrar no Painel"}
             </Button>
             
-            <Button 
-              variant="ghost" 
-              className="w-full" 
-              onClick={() => navigate("/")}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar para a Loja
-            </Button>
+            <div className="pt-4 border-t border-border mt-6">
+              <Button 
+                variant="ghost" 
+                type="button"
+                className="w-full text-muted-foreground" 
+                onClick={() => navigate("/")}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Voltar para a Loja
+              </Button>
+            </div>
           </form>
         </div>
       </div>
