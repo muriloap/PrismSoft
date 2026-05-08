@@ -22,51 +22,45 @@ const AdminDashboard = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      console.log("Iniciando tentativa de login administrativo para:", adminEmail);
       const { error } = await signIn(adminEmail, adminPassword);
       
       if (error) {
-        console.error("Erro no login inicial de admin:", error.message);
+        const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
         
-        // Se for o email do admin fixo, tentamos o provisionamento se não existir
-        if (adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
-          const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
-          
-          if (error.message.includes("User not found")) {
-            toast.info("Configurando primeiro acesso do Administrador...");
-            
-            await supabaseClient.auth.signUp({
-              email: adminEmail,
-              password: adminPassword,
-              options: { data: { full_name: "Administrador" } }
-            });
+        // Se o usuário não existir e for o email fixo, tentamos criar
+        if (error.message.includes("User not found") && adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
+          toast.info("Criando acesso de Administrador...");
+          await supabaseClient.auth.signUp({
+            email: adminEmail,
+            password: adminPassword,
+            options: { data: { full_name: "Administrador" } }
+          });
 
-            const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
-            if (!loginError && loginData.user) {
-              await supabaseClient.from('user_roles').upsert({
-                user_id: loginData.user.id,
-                role: 'admin'
-              }, { onConflict: 'user_id' });
-              
-              toast.success("Acesso Administrador configurado!");
-              return;
-            }
+          const { error: retryError, data: retryData } = await signIn(adminEmail, adminPassword);
+          if (!retryError && retryData.user) {
+            await supabaseClient.from('user_roles').upsert({
+              user_id: retryData.user.id,
+              role: 'admin'
+            }, { onConflict: 'user_id' });
+            
+            toast.success("Acesso configurado e logado!");
+            return;
           }
         }
-        
-        if (error.message.includes("Email not confirmed")) {
-          toast.error("Link de ativação pendente. AÇÃO: No Dashboard do Supabase (Auth > Providers > Email), desmarque 'Confirm Email' para logar agora.");
-        } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
-          toast.error("Este administrador já existe, mas a senha está incorreta.");
+
+        // Mensagens de erro claras
+        if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
+          toast.error("Administrador já existe, mas a senha está incorreta. Use 'Esqueceu a senha' se precisar resetar.");
+        } else if (error.message.includes("Email not confirmed")) {
+          toast.error("Por favor, desative 'Confirm Email' no seu Supabase Dashboard para logar sem link.");
         } else {
           toast.error(`Erro: ${error.message}`);
         }
       } else {
-        toast.success("Bem-vindo ao Painel Admin");
+        toast.success("Logado como Administrador");
       }
-    } catch (error) {
-      console.error("Erro técnico no login:", error);
-      toast.error("Erro de conexão.");
+    } catch (error: any) {
+      toast.error("Erro interno. Tente novamente.");
     } finally {
       setIsLoggingIn(false);
     }
@@ -74,7 +68,7 @@ const AdminDashboard = () => {
 
   const handleForgotPassword = async () => {
     if (!adminEmail) {
-      toast.error("Digite seu email de administrador primeiro.");
+      toast.error("Digite o email admin primeiro.");
       return;
     }
     try {
@@ -83,7 +77,7 @@ const AdminDashboard = () => {
         redirectTo: window.location.origin + "/admin",
       });
       if (error) throw error;
-      toast.success("Email de recuperação enviado! Verifique sua caixa de entrada.");
+      toast.success("Email de recuperação enviado!");
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -91,7 +85,7 @@ const AdminDashboard = () => {
 
   if (authLoading || adminLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
@@ -99,30 +93,26 @@ const AdminDashboard = () => {
 
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        <div className="fixed inset-0 bg-background pointer-events-none" />
-        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/3 rounded-full blur-[120px] pointer-events-none" />
-        <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/3 rounded-full blur-[120px] pointer-events-none" />
-
-        <div className="w-full max-w-md bg-card/50 backdrop-blur-md rounded-2xl border border-border p-8 relative z-10 shadow-xl">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        {/* Background Limpo Padrão */}
+        <div className="w-full max-w-md bg-card border border-border p-8 rounded-2xl shadow-xl">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
+            <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
               <Key className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Painel Admin</h1>
-            <p className="text-muted-foreground">Acesso restrito</p>
+            <h1 className="text-2xl font-bold mb-2">Acesso Admin</h1>
+            <p className="text-sm text-muted-foreground">Área para gerenciamento da loja</p>
           </div>
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email Administrativo</label>
+              <label className="text-sm font-medium">Email</label>
               <Input
                 type="email"
                 placeholder="admin@exemplo.com"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 autoComplete="email"
-                className="bg-background/40 border-border/50"
                 required
               />
             </div>
@@ -132,7 +122,7 @@ const AdminDashboard = () => {
                 <button 
                   type="button"
                   onClick={handleForgotPassword}
-                  className="text-xs text-primary hover:underline transition-all"
+                  className="text-xs text-primary hover:underline hover:text-primary/80 transition-colors"
                 >
                   Esqueceu a senha?
                 </button>
@@ -143,23 +133,22 @@ const AdminDashboard = () => {
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 autoComplete="current-password"
-                className="bg-background/40 border-border/50"
                 required
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-[0.98] mt-2"
+              className="w-full bg-primary hover:bg-primary/90 mt-2"
               disabled={isLoggingIn}
             >
-              {isLoggingIn ? "Autenticando..." : "Entrar no Painel"}
+              {isLoggingIn ? "Entrando..." : "Entrar no Painel"}
             </Button>
             
-            <div className="pt-6 border-t border-border/50 mt-6">
+            <div className="pt-4 border-t border-border mt-6">
               <Button 
                 variant="ghost" 
                 type="button"
-                className="w-full text-muted-foreground hover:text-foreground transition-colors" 
+                className="w-full text-muted-foreground" 
                 onClick={() => navigate("/")}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -167,12 +156,6 @@ const AdminDashboard = () => {
               </Button>
             </div>
           </form>
-        </div>
-
-        <div className="mt-8 text-center relative z-10 max-w-sm px-4">
-          <p className="text-[10px] text-muted-foreground leading-relaxed uppercase tracking-widest opacity-60">
-            Acesso administrativo monitorado • TLS 1.3
-          </p>
         </div>
       </div>
     );
