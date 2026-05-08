@@ -82,10 +82,12 @@ const AuthPage = () => {
 
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
+          if (error.message === "SUPABASE_NOT_CONFIGURED") {
+            toast.error("Configuração necessária: Vá em Settings -> Environment e adicione VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY");
+          } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
             toast.error("Email ou senha incorretos");
-          } else if (error.message === "Failed to fetch") {
-            toast.error("Erro de conexão: Não foi possível alcançar o servidor. Verifique suas chaves do Supabase nas variáveis de ambiente.");
+          } else if (error.message === "Failed to fetch" || error.message.includes("Invalid path")) {
+            toast.error("Configuração necessária: Verifique suas chaves do Supabase nas configurações do projeto (Settings).");
           } else {
             toast.error(error.message);
           }
@@ -96,7 +98,9 @@ const AuthPage = () => {
       } else {
         const { error } = await signUp(email, password, fullName);
         if (error) {
-          if (error.message.includes("User already registered")) {
+          if (error.message === "SUPABASE_NOT_CONFIGURED") {
+            toast.error("Configuração necessária: Vá em Settings -> Environment e adicione VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY");
+          } else if (error.message.includes("User already registered")) {
             toast.error("Este email já está cadastrado");
           } else if (error.message === "Failed to fetch") {
             toast.error("Erro de conexão: Não foi possível alcançar o servidor. Verifique suas chaves do Supabase nas variáveis de ambiente.");

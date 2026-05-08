@@ -6,12 +6,15 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Use a safe fallback URL if missing to prevent initialization crash
-const safeUrl = SUPABASE_URL && SUPABASE_URL.startsWith('http') ? SUPABASE_URL : "https://missing-supabase-url.supabase.co";
-const safeKey = SUPABASE_PUBLISHABLE_KEY || "missing-key";
+// But ensure it looks like a valid Supabase URL structure to avoid client-side validation errors
+const safeUrl = SUPABASE_URL && SUPABASE_URL.startsWith('http') ? SUPABASE_URL : "https://your-project.supabase.co";
+const safeKey = SUPABASE_PUBLISHABLE_KEY || "your-anon-key";
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.error("CRITICAL: Supabase credentials are missing! The app will not function correctly.");
+  console.warn("ENVIRONMENT ERROR: Supabase credentials (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) are missing in project settings.");
 }
+
+export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_PUBLISHABLE_KEY);
 
 export const supabase = createClient<Database>(safeUrl, safeKey, {
   auth: {
