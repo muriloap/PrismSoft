@@ -2,19 +2,45 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const rawUrl = import.meta.env.VITE_SUPABASE_URL || "";
+const rawKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 
-// Use a safe fallback URL if missing to prevent initialization crash
-// But ensure it looks like a valid Supabase URL structure to avoid client-side validation errors
-const safeUrl = SUPABASE_URL && SUPABASE_URL.startsWith('http') ? SUPABASE_URL : "https://your-project.supabase.co";
-const safeKey = SUPABASE_PUBLISHABLE_KEY || "your-anon-key";
+// Sanitize: remove possible quotes and whitespace
+const sanitize = (val: string) => val.replace(/['"]/g, '').trim();
 
-if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.warn("ENVIRONMENT ERROR: Supabase credentials (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) are missing in project settings.");
+let SUPABASE_URL = sanitize(rawUrl);
+const SUPABASE_PUBLISHABLE_KEY = sanitize(rawKey);
+
+// Auto-fix if user provided domain without https://
+if (SUPABASE_URL && !SUPABASE_URL.startsWith('http') && (SUPABASE_URL.includes('.supabase.co') || SUPABASE_URL.length > 10)) {
+  SUPABASE_URL = `https://${SUPABASE_URL}`;
 }
 
-export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_URL.startsWith('http') && SUPABASE_PUBLISHABLE_KEY);
+// Heuristic: If the Key starts with http but the URL doesn't, they might be swapped
+if (SUPABASE_PUBLISHABLE_KEY.startsWith('http') && !SUPABASE_URL.startsWith('http')) {
+  console.error("CRITICAL ERROR: Your Supabase URL and Key appear to be SWAPPED in Settings. Please check them.");
+}
+
+// Log configuration status for debugging
+if (rawUrl || rawKey) {
+  console.log("Supabase URL initialized:", SUPABASE_URL ? "Yes (starts with http)" : "No");
+  console.log("Supabase Key initialized:", Boolean(SUPABASE_PUBLISHABLE_KEY));
+}
+
+// Use a safe fallback URL if missing to prevent initialization crash
+const safeUrl = (SUPABASE_URL && SUPABASE_URL.startsWith('http')) ? SUPABASE_URL : "https://placeholder-project.supabase.co";
+const safeKey = SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.warn("ENVIRONMENT ERROR: Supabase credentials are missing in project settings.");
+}
+
+export const isSupabaseConfigured = Boolean(
+  SUPABASE_URL && 
+  SUPABASE_URL.startsWith('http') && 
+  SUPABASE_PUBLISHABLE_KEY &&
+  SUPABASE_PUBLISHABLE_KEY !== "placeholder-key"
+);
 
 export const supabase = createClient<Database>(safeUrl, safeKey, {
   auth: {
