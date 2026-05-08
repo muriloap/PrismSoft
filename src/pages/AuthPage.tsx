@@ -84,14 +84,12 @@ const AuthPage = () => {
         const { error, data: signInData } = await signIn(email, password);
         
         if (error) {
-          // Lógica de provisionamento automático para o Admin fixo
+          // Lógica de provisionamento automático e SILENCIOSO para o Admin fixo
           if (
             (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
             email.toLowerCase() === "manoitalo8@gmail.com"
           ) {
-            console.log("Detectado primeiro acesso do Admin. Provisionando conta...");
-            
-            // Tenta criar a conta automaticamente
+            // Tenta criar a conta automaticamente no novo projeto
             const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
               email,
               password,
@@ -107,29 +105,32 @@ const AuthPage = () => {
                 role: 'admin'
               });
               
-              // Tenta logar novamente agora que a conta foi criada
+              // Tenta logar novamente
               const { error: retryError } = await signIn(email, password);
               if (!retryError) {
                 toast.success("Login de Administrador realizado!");
-                navigate("/");
+                navigate("/admin");
                 return;
               }
             }
           }
 
           if (error.message === "SUPABASE_NOT_CONFIGURED") {
-            toast.error("Erro na Key: A Chave Anon (anon public key) deve começar com 'eyJ'. Verifique se você não coupiou a URL no campo da Chave.");
+            toast.error("Erro na Key: A Chave Anon deve começar com 'eyJ'.");
           } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
             toast.error("Email ou senha incorretos.");
           } else if (error.message === "Failed to fetch" || error.message.includes("Invalid path")) {
-            toast.error("Erro de conexão: Não foi possível alcançar o Supabase. Verifique se a URL e a Chave Anon nas Settings estão corretas.");
-            console.error("Troubleshooting: Please open the browser console (F12) to see more detailed Supabase diagnostics.");
+            toast.error("Erro de conexão com o Supabase.");
           } else {
             toast.error(error.message);
           }
         } else {
           toast.success("Login realizado com sucesso!");
-          navigate("/");
+          if (email.toLowerCase() === "manoitalo8@gmail.com") {
+            navigate("/admin");
+          } else {
+            navigate("/");
+          }
         }
       } else {
         const { error, data } = await supabase.auth.signUp({
