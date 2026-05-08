@@ -59,7 +59,7 @@ const AdminDashboard = () => {
           
           // Se ainda falhar, agora sabemos que é a senha que está errada no banco
           if (retryError?.message.includes("Invalid login credentials") || retryError?.message.includes("invalid_credentials")) {
-            toast.error("Este admin já existe no Supabase, mas a senha no banco não coincide com 'Novac123'.");
+            toast.error("Administrador já existe, mas a senha fornecida está incorreta.");
             return;
           }
           
