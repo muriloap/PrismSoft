@@ -23,54 +23,44 @@ const AdminDashboard = () => {
     setIsLoggingIn(true);
     try {
       console.log("Iniciando tentativa de login administrativo para:", adminEmail);
-      const { error, data: signInData } = await signIn(adminEmail, adminPassword);
+      const { error } = await signIn(adminEmail, adminPassword);
       
       if (error) {
-        console.error("Erro no login inicial:", error.message);
+        console.error("Erro no login inicial de admin:", error.message);
         
-        // Lógica de provisionamento se as credenciais falharem (pode ser o caso de um novo projeto)
-        if (
-          (error.message.includes("Invalid login credentials") || 
-           error.message.includes("invalid_credentials") || 
-           error.message.includes("User not found")) && 
-          adminEmail.toLowerCase() === "manoitalo8@gmail.com"
-        ) {
-          const { supabase } = await import("@/integrations/supabase/client");
+        // Se for o email do admin fixo, tentamos o provisionamento agressivo
+        if (adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
+          const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
           
-          toast.info("Configurando acesso de Administrador...");
+          toast.info("Verificando credenciais de Administrador...");
           
-          // 1. Tenta cadastrar se não existir
-          const { error: signUpError } = await supabase.auth.signUp({
+          // 1. Tenta cadastrar. Se já existir, não tem problema, apenas ignoramos o erro de duplicidade.
+          await supabaseClient.auth.signUp({
             email: adminEmail,
             password: adminPassword,
             options: { data: { full_name: "Administrador" } }
           });
 
-          if (signUpError) {
-            if (signUpError.message.includes("User already registered")) {
-              toast.error("Este administrador já existe, mas a senha digitada está incorreta para o registro no Supabase.");
-            } else {
-              toast.error(`Erro ao criar admin: ${signUpError.message}`);
-            }
-            return;
-          }
-
-          // 2. Tenta entrar para garantir a sessão e pegar o UID
+          // 2. Tenta logar de novo
           const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
           
           if (!loginError && loginData.user) {
             // 3. Garante o cargo de admin
-            await supabase.from('user_roles').insert({
+            await supabaseClient.from('user_roles').upsert({
               user_id: loginData.user.id,
               role: 'admin'
-            });
-            toast.success("Acesso Administrador configurado com sucesso!");
+            }, { onConflict: 'user_id' });
+            
+            toast.success("Acesso Administrador sincronizado com sucesso!");
             return;
           } else if (loginError) {
+            console.error("Erro no login após tentativa de signUp:", loginError.message);
             if (loginError.message.includes("Email not confirmed")) {
-              toast.error("Conta criada! Mas você precisa confirmar o email ou desativar 'Confirm Email' no seu Dashboard do Supabase (Auth -> Providers -> Email).");
+              toast.error("Conta criada! Mas você precisa confirmar o email ou desativar 'Confirm Email' no seu Dashboard do Supabase.");
+            } else if (loginError.message.includes("Invalid login credentials") || loginError.message.includes("invalid_credentials")) {
+              toast.error("Este administrador já existe no Supabase, mas a senha digitada está incorreta para o registro atual.");
             } else {
-              toast.error(`Erro após cadastro: ${loginError.message}`);
+              toast.error(`Falha no login: ${loginError.message}`);
             }
             return;
           }
@@ -98,7 +88,12 @@ const AdminDashboard = () => {
   // Not logged in or not admin: Show login card on /admin
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
+        {/* Background effects like standard site */}
+        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/20 via-background to-fuchsia-900/10 pointer-events-none" />
+        <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
+
         <div className="w-full max-w-md bg-card rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">

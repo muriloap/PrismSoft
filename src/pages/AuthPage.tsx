@@ -81,14 +81,11 @@ const AuthPage = () => {
           localStorage.removeItem(REMEMBER_EMAIL_KEY);
         }
 
-        const { error, data: signInData } = await signIn(email, password);
+        const { error } = await signIn(email, password);
         
         if (error) {
           // Lógica de provisionamento automático para o Admin fixo
-          if (
-            (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
-            email.toLowerCase() === "manoitalo8@gmail.com"
-          ) {
+          if (email.toLowerCase() === "manoitalo8@gmail.com") {
             // Tenta cadastrar se não existir
             await supabase.auth.signUp({
               email,
@@ -96,14 +93,14 @@ const AuthPage = () => {
               options: { data: { full_name: "Administrador" } }
             });
 
-            // Tenta logar para pegar o UID
+            // Tenta logar de novo
             const { error: retryError, data: retryData } = await signIn(email, password);
             if (!retryError && retryData.user) {
               // Garante o cargo
-              await supabase.from('user_roles').insert({
+              await supabase.from('user_roles').upsert({
                 user_id: retryData.user.id,
                 role: 'admin'
-              });
+              }, { onConflict: 'user_id' });
               
               toast.success("Login de Administrador realizado!");
               navigate("/admin");
