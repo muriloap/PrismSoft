@@ -28,7 +28,7 @@ const AdminDashboard = () => {
       if (error) {
         console.error("Erro no login inicial:", error.message);
         
-        // Lógica de provisionamento se as credenciais falharem (novo projeto)
+        // Lógica de provisionamento se as credenciais falharem (pode ser o caso de um novo projeto)
         if (
           (error.message.includes("Invalid login credentials") || 
            error.message.includes("invalid_credentials") || 
@@ -37,31 +37,45 @@ const AdminDashboard = () => {
         ) {
           const { supabase } = await import("@/integrations/supabase/client");
           
-          toast.info("Sincronizando perfil de administrador...");
+          toast.info("Configurando acesso de Administrador...");
           
           // 1. Tenta cadastrar se não existir
-          await supabase.auth.signUp({
+          const { error: signUpError } = await supabase.auth.signUp({
             email: adminEmail,
             password: adminPassword,
             options: { data: { full_name: "Administrador" } }
           });
 
-          // 2. Tenta entrar para garantir a sessão
+          if (signUpError) {
+            if (signUpError.message.includes("User already registered")) {
+              toast.error("Este administrador já existe, mas a senha digitada está incorreta para o registro no Supabase.");
+            } else {
+              toast.error(`Erro ao criar admin: ${signUpError.message}`);
+            }
+            return;
+          }
+
+          // 2. Tenta entrar para garantir a sessão e pegar o UID
           const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
           
           if (!loginError && loginData.user) {
+            // 3. Garante o cargo de admin
             await supabase.from('user_roles').insert({
               user_id: loginData.user.id,
               role: 'admin'
             });
-            toast.success("Acesso Admin configurado!");
+            toast.success("Acesso Administrador configurado com sucesso!");
             return;
           } else if (loginError) {
-            toast.error(`Erro: ${loginError.message === "Email not confirmed" ? "Por favor, confirme o email no seu Dashboard do Supabase ou desative a confirmação de email." : "Senha incorreta para o administrador existente."}`);
+            if (loginError.message.includes("Email not confirmed")) {
+              toast.error("Conta criada! Mas você precisa confirmar o email ou desativar 'Confirm Email' no seu Dashboard do Supabase (Auth -> Providers -> Email).");
+            } else {
+              toast.error(`Erro após cadastro: ${loginError.message}`);
+            }
             return;
           }
         }
-        toast.error("Email ou senha de administrador incorretos.");
+        toast.error("Acesso negado. Verifique email e senha.");
       } else {
         toast.success("Bem-vindo ao Painel Admin");
       }
