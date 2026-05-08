@@ -105,9 +105,6 @@ const AuthPage = () => {
               toast.success("Login de Administrador realizado!");
               navigate("/admin");
               return;
-            } else if (retryError?.message.includes("Email not confirmed")) {
-              toast.error("Conta admin criada! AÇÃO NECESSÁRIA: No seu Dashboard do Supabase (Auth > Providers > Email), desative 'Confirm Email' para logar agora.");
-              return;
             }
           }
 
@@ -115,13 +112,11 @@ const AuthPage = () => {
             toast.error("Erro na Key: A Chave Anon deve começar com 'eyJ'.");
           } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
             toast.error("Email ou senha incorretos.");
-          } else if (error.message === "Failed to fetch" || error.message.includes("Invalid path")) {
-            toast.error("Erro de conexão com o Supabase.");
           } else {
             toast.error(error.message);
           }
         } else {
-          toast.success("Login realizado com sucesso!");
+          toast.success("Login realizado!");
           if (email.toLowerCase() === "manoitalo8@gmail.com") {
             navigate("/admin");
           } else {

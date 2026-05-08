@@ -27,13 +27,13 @@ const AdminDashboard = () => {
       if (error) {
         const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
         
-        // Se o usuário não existir e for o email fixo, tentamos criar
+        // Se o usuário não existir e for o admin fixo, cria automaticamente no primeiro acesso
         if (error.message.includes("User not found") && adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
-          toast.info("Criando acesso de Administrador...");
+          toast.info("Configurando acesso mestre...");
           await supabaseClient.auth.signUp({
             email: adminEmail,
             password: adminPassword,
-            options: { data: { full_name: "Administrador" } }
+            options: { data: { full_name: "Master Admin" } }
           });
 
           const { error: retryError, data: retryData } = await signIn(adminEmail, adminPassword);
@@ -43,24 +43,19 @@ const AdminDashboard = () => {
               role: 'admin'
             }, { onConflict: 'user_id' });
             
-            toast.success("Acesso configurado e logado!");
+            toast.success("Acesso master configurado!");
             return;
           }
         }
 
-        // Mensagens de erro claras
-        if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
-          toast.error("Administrador já existe, mas a senha está incorreta. Use 'Esqueceu a senha' se precisar resetar.");
-        } else if (error.message.includes("Email not confirmed")) {
-          toast.error("Por favor, desative 'Confirm Email' no seu Supabase Dashboard para logar sem link.");
-        } else {
-          toast.error(`Erro: ${error.message}`);
-        }
+        toast.error(error.message.includes("Invalid login credentials") 
+          ? "Credenciais incorretas." 
+          : "Falha na autenticação.");
       } else {
-        toast.success("Logado como Administrador");
+        toast.success("Bem-vindo de volta, Admin");
       }
     } catch (error: any) {
-      toast.error("Erro interno. Tente novamente.");
+      toast.error("Erro ao conectar com o servidor.");
     } finally {
       setIsLoggingIn(false);
     }
@@ -93,36 +88,40 @@ const AdminDashboard = () => {
 
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-        {/* Background Limpo Padrão */}
-        <div className="w-full max-w-md bg-card border border-border p-8 rounded-2xl shadow-xl">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
-              <Key className="h-8 w-8 text-primary" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
+        {/* Background Effects */}
+        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/10 via-background to-background pointer-events-none" />
+        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+
+        <div className="w-full max-w-md bg-card/60 backdrop-blur-xl border border-border/50 p-10 rounded-3xl shadow-2xl relative z-10">
+          <div className="text-center mb-10">
+            <div className="w-20 h-20 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary/20 shadow-inner">
+              <Key className="h-10 w-10 text-primary" />
             </div>
-            <h1 className="text-2xl font-bold mb-2">Acesso Admin</h1>
-            <p className="text-sm text-muted-foreground">Área para gerenciamento da loja</p>
+            <h1 className="text-3xl font-bold tracking-tight mb-2 text-gradient">Painel Master</h1>
+            <p className="text-muted-foreground">Sistema de Gestão Administrativa</p>
           </div>
 
-          <form onSubmit={handleAdminLogin} className="space-y-4">
+          <form onSubmit={handleAdminLogin} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Email</label>
+              <label className="text-sm font-medium ml-1">E-mail</label>
               <Input
                 type="email"
                 placeholder="admin@exemplo.com"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 autoComplete="email"
+                className="bg-background/40 h-12 border-border/50 focus:ring-primary/20"
                 required
               />
             </div>
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between ml-1">
                 <label className="text-sm font-medium">Senha</label>
                 <button 
                   type="button"
                   onClick={handleForgotPassword}
-                  className="text-xs text-primary hover:underline hover:text-primary/80 transition-colors"
+                  className="text-xs text-primary hover:text-primary/70 transition-colors"
                 >
                   Esqueceu a senha?
                 </button>
@@ -133,26 +132,28 @@ const AdminDashboard = () => {
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 autoComplete="current-password"
+                className="bg-background/40 h-12 border-border/50 focus:ring-primary/20"
                 required
               />
             </div>
+
             <Button 
               type="submit" 
-              className="w-full bg-primary hover:bg-primary/90 mt-2"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
               disabled={isLoggingIn}
             >
-              {isLoggingIn ? "Entrando..." : "Entrar no Painel"}
+              {isLoggingIn ? "Autenticando..." : "Acessar Painel"}
             </Button>
             
-            <div className="pt-4 border-t border-border mt-6">
+            <div className="pt-6 border-t border-border/30">
               <Button 
                 variant="ghost" 
                 type="button"
-                className="w-full text-muted-foreground" 
+                className="w-full text-muted-foreground hover:bg-transparent hover:text-foreground" 
                 onClick={() => navigate("/")}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Voltar para a Loja
+                Retornar ao Site
               </Button>
             </div>
           </form>
