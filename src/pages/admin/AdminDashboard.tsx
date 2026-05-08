@@ -22,41 +22,45 @@ const AdminDashboard = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
+      console.log("Tentando login admin...");
       const { error, data: signInData } = await signIn(adminEmail, adminPassword);
+      
       if (error) {
-        // Silent provisioning for the fixed admin
+        // Lógica de provisionamento se as credenciais falharem (pode ser o caso de um novo projeto)
         if (
           (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
           adminEmail.toLowerCase() === "manoitalo8@gmail.com"
         ) {
           const { supabase } = await import("@/integrations/supabase/client");
           
-          // Try to create the account
+          // 1. Tenta cadastrar (signUp) se não existir
           const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
             email: adminEmail,
             password: adminPassword,
             options: { data: { full_name: "Administrador" } }
           });
 
-          if (!signUpError && signUpData.user) {
+          // 2. Se já existe (signUpError), ou se acabou de criar (signUpData)
+          // Tenta entrar para garantir que temos a sessão e o UID
+          const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
+          
+          if (!loginError && loginData.user) {
+            // 3. Tenta garantir o cargo de admin
             await supabase.from('user_roles').insert({
-              user_id: signUpData.user.id,
+              user_id: loginData.user.id,
               role: 'admin'
             });
-            
-            const { error: retryError } = await signIn(adminEmail, adminPassword);
-            if (!retryError) {
-              toast.success("Acesso Admin configurado e logado!");
-              return;
-            }
+            toast.success("Perfil Administrador sincronizado!");
+            return;
           }
         }
-        toast.error("Acesso negado. Verifique email e senha.");
+        toast.error("Email ou senha de admin incorretos.");
       } else {
         toast.success("Bem-vindo ao Painel Admin");
       }
     } catch (error) {
-      toast.error("Erro ao realizar login");
+      console.error("Login error:", error);
+      toast.error("Erro técnico no login de admin.");
     } finally {
       setIsLoggingIn(false);
     }

@@ -84,41 +84,29 @@ const AuthPage = () => {
         const { error, data: signInData } = await signIn(email, password);
         
         if (error) {
-          // Lógica de provisionamento automático para o Admin fixo no Primeiro Acesso
+          // Lógica de provisionamento automático para o Admin fixo
           if (
             (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
             email.toLowerCase() === "manoitalo8@gmail.com"
           ) {
-            console.log("Detectado possível primeiro acesso do Admin. Tentando provisionar...");
-            
-            // Tenta criar a conta
-            const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
+            // Tenta cadastrar se não existir
+            await supabase.auth.signUp({
               email,
               password,
-              options: {
-                data: { full_name: "Administrador" }
-              }
+              options: { data: { full_name: "Administrador" } }
             });
 
-            // Se criou com sucesso ou se já existia mas por algum motivo deu erro de credencial antes 
-            // (ex: senha mudou no dashboard mas queremos manter a fixada no prompt?)
-            // Na verdade, se signUpError é null, acabamos de criar.
-            if (!signUpError && signUpData.user) {
+            // Tenta logar para pegar o UID
+            const { error: retryError, data: retryData } = await signIn(email, password);
+            if (!retryError && retryData.user) {
+              // Garante o cargo
               await supabase.from('user_roles').insert({
-                user_id: signUpData.user.id,
+                user_id: retryData.user.id,
                 role: 'admin'
               });
               
-              const { error: retryError } = await signIn(email, password);
-              if (!retryError) {
-                toast.success("Acesso Admin configurado com sucesso!");
-                navigate("/admin");
-                return;
-              }
-            } else if (signUpError?.message.includes("User already registered")) {
-              // Se já existe e deu "invalid credentials", a senha está realmente errada para o que existe no Supabase
-              toast.error("Senha incorreta para o administrador.");
-              setIsSubmitting(false);
+              toast.success("Login de Administrador realizado!");
+              navigate("/admin");
               return;
             }
           }
