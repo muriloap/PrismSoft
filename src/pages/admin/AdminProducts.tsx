@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, Package, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Package, Loader2, Upload } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useProducts, Product, ProductVariation } from "@/hooks/useProducts";
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { PRODUCT_CATEGORIES } from "@/constants/categories";
+import { supabase } from "@/integrations/supabase/client";
 
 const emptyVariation: ProductVariation = {
   id: "",
@@ -60,6 +61,7 @@ const AdminProducts = () => {
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { products, loading: productsLoading, createProduct, updateProduct, deleteProduct } = useProducts();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -67,6 +69,7 @@ const AdminProducts = () => {
   const [formData, setFormData] = useState(emptyProduct);
   const [featuresText, setFeaturesText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -130,6 +133,47 @@ const AdminProducts = () => {
     const newVariations = [...formData.variations];
     newVariations[index] = { ...newVariations[index], [field]: value };
     setFormData({ ...formData, variations: newVariations });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error("Por favor, selecione um arquivo de imagem.");
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+      const filePath = `product-images/${fileName}`;
+
+      const { data, error } = await supabase.storage
+        .from('products')
+        .upload(filePath, file);
+
+      if (error) {
+        if (error.message.includes("not found")) {
+          throw new Error("Bucket 'products' não encontrado. Crie um bucket público chamado 'products' no seu Supabase Storage.");
+        }
+        throw error;
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('products')
+        .getPublicUrl(filePath);
+
+      setFormData({ ...formData, image_url: publicUrl });
+      toast.success("Imagem enviada com sucesso!");
+    } catch (error: any) {
+      console.error("Erro no upload:", error);
+      toast.error(error.message || "Erro ao fazer upload da imagem");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -344,18 +388,51 @@ const AdminProducts = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="image_url">URL da Imagem</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="image_url"
-                    value={formData.image_url}
-                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                    placeholder="https://..."
-                    className="flex-1"
-                  />
+                <Label htmlFor="image_url">Imagem do Produto</Label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-2">
+                    <Input
+                      id="image_url"
+                      value={formData.image_url}
+                      onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                      placeholder="https://... ou faça upload"
+                      className="flex-1"
+                    />
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept="image/*"
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      className="gap-2 shrink-0"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4" />
+                      )}
+                      {isUploading ? "Enviando..." : "Fazer Upload"}
+                    </Button>
+                  </div>
                   {formData.image_url && (
-                    <div className="w-10 h-10 rounded border overflow-hidden bg-muted">
-                      <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="w-full h-32 rounded-lg border border-border/50 overflow-hidden bg-muted group relative">
+                      <img src={formData.image_url} alt="Preview" className="w-full h-full object-contain" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-white hover:text-white"
+                          onClick={() => setFormData({ ...formData, image_url: "" })}
+                        >
+                          Remover
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
