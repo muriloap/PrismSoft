@@ -22,40 +22,53 @@ const AdminDashboard = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      const { error } = await signIn(adminEmail, adminPassword);
+      const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
+      const isMaster = adminEmail.toLowerCase() === "manoitalo8@gmail.com";
       
-      if (error) {
-        const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
-        
-        // Se o usuário não existir e for o admin fixo, cria automaticamente no primeiro acesso
-        if (error.message.includes("User not found") && adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
-          toast.info("Configurando acesso mestre...");
+      // Tenta login inicial
+      const { error: initialError, data: initialData } = await signIn(adminEmail, adminPassword);
+      
+      if (initialError) {
+        // Se for o master e falhar (independente do erro), tentamos o provisionamento
+        if (isMaster) {
+          console.log("Tentando autoprovisionamento para Master Admin...");
+          
+          // 1. Tenta cadastrar (ignora se já existir)
           await supabaseClient.auth.signUp({
             email: adminEmail,
             password: adminPassword,
-            options: { data: { full_name: "Master Admin" } }
           });
 
+          // 2. Tenta logar novamente com a senha fornecida
           const { error: retryError, data: retryData } = await signIn(adminEmail, adminPassword);
+          
           if (!retryError && retryData.user) {
-            await supabaseClient.from('user_roles').upsert({
-              user_id: retryData.user.id,
-              role: 'admin'
+            // 3. Garante Cargo Admin
+            await supabaseClient.from('user_roles').upsert({ 
+              user_id: retryData.user.id, 
+              role: 'admin' 
             }, { onConflict: 'user_id' });
             
-            toast.success("Acesso master configurado!");
+            toast.success("Acesso Admin configurado e logado!");
             return;
           }
+          
+          // Se ainda falhar, agora sabemos que é a senha que está errada no banco
+          if (retryError?.message.includes("Invalid login credentials") || retryError?.message.includes("invalid_credentials")) {
+            toast.error("Este admin já existe no Supabase, mas a senha no banco não coincide com 'Novac123'.");
+            return;
+          }
+          
+          toast.error(`Erro: ${retryError?.message || "Falha ao configurar admin"}`);
+          return;
         }
 
-        toast.error(error.message.includes("Invalid login credentials") 
-          ? "Credenciais incorretas." 
-          : "Falha na autenticação.");
+        toast.error("Email ou senha de administrador incorretos.");
       } else {
-        toast.success("Bem-vindo de volta, Admin");
+        toast.success("Bem-vindo ao Painel");
       }
     } catch (error: any) {
-      toast.error("Erro ao conectar com o servidor.");
+      toast.error("Erro de conexão.");
     } finally {
       setIsLoggingIn(false);
     }
