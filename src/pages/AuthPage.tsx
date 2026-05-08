@@ -84,12 +84,14 @@ const AuthPage = () => {
         const { error, data: signInData } = await signIn(email, password);
         
         if (error) {
-          // Lógica de provisionamento automático e SILENCIOSO para o Admin fixo
+          // Lógica de provisionamento automático para o Admin fixo no Primeiro Acesso
           if (
             (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
             email.toLowerCase() === "manoitalo8@gmail.com"
           ) {
-            // Tenta criar a conta automaticamente no novo projeto
+            console.log("Detectado possível primeiro acesso do Admin. Tentando provisionar...");
+            
+            // Tenta criar a conta
             const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
               email,
               password,
@@ -98,20 +100,26 @@ const AuthPage = () => {
               }
             });
 
+            // Se criou com sucesso ou se já existia mas por algum motivo deu erro de credencial antes 
+            // (ex: senha mudou no dashboard mas queremos manter a fixada no prompt?)
+            // Na verdade, se signUpError é null, acabamos de criar.
             if (!signUpError && signUpData.user) {
-              // Atribui o cargo de admin
               await supabase.from('user_roles').insert({
                 user_id: signUpData.user.id,
                 role: 'admin'
               });
               
-              // Tenta logar novamente
               const { error: retryError } = await signIn(email, password);
               if (!retryError) {
-                toast.success("Login de Administrador realizado!");
+                toast.success("Acesso Admin configurado com sucesso!");
                 navigate("/admin");
                 return;
               }
+            } else if (signUpError?.message.includes("User already registered")) {
+              // Se já existe e deu "invalid credentials", a senha está realmente errada para o que existe no Supabase
+              toast.error("Senha incorreta para o administrador.");
+              setIsSubmitting(false);
+              return;
             }
           }
 

@@ -1,26 +1,42 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Users, BarChart3, ArrowLeft, Key, Tag, Package } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 
 const AdminDashboard = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signIn } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const navigate = useNavigate();
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      navigate("/auth");
-    }
-  }, [user, authLoading, navigate]);
+  // If we are not logged in and not loading, we stay on this page to show the specific admin login
+  // if the user specifically navigated here.
 
-  useEffect(() => {
-    if (!adminLoading && !isAdmin && user) {
-      navigate("/");
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    try {
+      const { error } = await signIn(adminEmail, adminPassword);
+      if (error) {
+        // Here we could also add the silent provisioning logic if it fails for the fixed admin
+        // But since AuthPage already has it, redirecting back to AuthPage might be safer if it fails.
+        // Or we can duplicate it here for convenience.
+        toast.error("Acesso negado. Verifique email e senha.");
+      } else {
+        toast.success("Bem-vindo ao Painel Admin");
+      }
+    } catch (error) {
+      toast.error("Erro ao realizar login");
+    } finally {
+      setIsLoggingIn(false);
     }
-  }, [isAdmin, adminLoading, user, navigate]);
+  };
 
   if (authLoading || adminLoading) {
     return (
@@ -30,8 +46,63 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!isAdmin) {
-    return null;
+  // Not logged in or not admin: Show login card on /admin
+  if (!user || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background bg-[url('https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=2070')] bg-cover bg-center flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+        <div className="w-full max-w-md bg-card/90 backdrop-blur-xl rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-purple-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-500/30">
+              <Key className="h-8 w-8 text-purple-400" />
+            </div>
+            <h1 className="text-3xl font-bold text-gradient mb-2">Acesso Restrito</h1>
+            <p className="text-muted-foreground">Área administrativa protegida</p>
+          </div>
+
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Email Administrativo</label>
+              <Input
+                type="email"
+                placeholder="admin@exemplo.com"
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
+                className="bg-background/50"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Senha</label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                className="bg-background/50"
+                required
+              />
+            </div>
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500"
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? "Autenticando..." : "Entrar no Painel"}
+            </Button>
+            
+            <Button 
+              variant="ghost" 
+              className="w-full" 
+              onClick={() => navigate("/")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar para a Loja
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   const menuItems = [

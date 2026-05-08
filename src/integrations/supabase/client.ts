@@ -57,9 +57,9 @@ if (keyIsInvalid) {
   const prefix = SUPABASE_PUBLISHABLE_KEY.substring(0, 3);
   let hint = "Please ensure you copied the 'anon' public key correctly from your Supabase Dashboard -> Project Settings -> API.";
   if (prefix === 'sb_') {
-    hint = "O prefixo 'sb_' indica que você copiou uma Chave de Gerenciamento ou Token Pessoal. Você precisa da 'anon key' do seu projeto, que começa com 'eyJ'. Vá em Project Settings -> API.";
+    hint = "O prefixo 'sb_' indica que você pode ter copiado uma Chave de Gerenciamento ou Token Pessoal em vez da 'anon key'. Tente logar, mas se falhar, verifique Project Settings -> API.";
   }
-  console.error(`CRITICAL ERROR: Your Supabase Anon Key starts with '${prefix}' but it MUST start with 'eyJ'. ${hint}`);
+  console.warn(`SUPABASE CONFIG WARNING: Your Key starts with '${prefix}'. Usually it should start with 'eyJ'. ${hint}`);
 }
 
 // Use a safe fallback URL if missing to prevent initialization crash
@@ -74,7 +74,6 @@ export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 
   SUPABASE_URL.startsWith('http') && 
   SUPABASE_PUBLISHABLE_KEY &&
-  !keyIsInvalid &&
   SUPABASE_PUBLISHABLE_KEY !== "placeholder-key"
 );
 
