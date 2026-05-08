@@ -28,79 +28,89 @@ const AdminDashboard = () => {
       if (error) {
         console.error("Erro no login inicial de admin:", error.message);
         
-        // Se for o email do admin fixo, tentamos o provisionamento agressivo
+        // Se for o email do admin fixo, tentamos o provisionamento se não existir
         if (adminEmail.toLowerCase() === "manoitalo8@gmail.com") {
           const { supabase: supabaseClient } = await import("@/integrations/supabase/client");
           
-          toast.info("Verificando credenciais de Administrador...");
-          
-          // 1. Tenta cadastrar. Se já existir, não tem problema, apenas ignoramos o erro de duplicidade.
-          await supabaseClient.auth.signUp({
-            email: adminEmail,
-            password: adminPassword,
-            options: { data: { full_name: "Administrador" } }
-          });
-
-          // 2. Tenta logar de novo
-          const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
-          
-          if (!loginError && loginData.user) {
-            await supabaseClient.from('user_roles').upsert({
-              user_id: loginData.user.id,
-              role: 'admin'
-            }, { onConflict: 'user_id' });
+          if (error.message.includes("User not found")) {
+            toast.info("Configurando primeiro acesso do Administrador...");
             
-            toast.success("Acesso Administrador sincronizado!");
-            return;
-          } else if (loginError) {
-            console.error("Erro no login após tentativa de signUp:", loginError.message);
-            if (loginError.message.includes("Email not confirmed")) {
-              toast.error("Conta criada! AÇÃO NECESSÁRIA: No Dashboard do Supabase (Auth > Providers > Email), desmarque 'Confirm Email' para acessar sem verificar o link.");
-            } else if (loginError.message.includes("Invalid login credentials") || loginError.message.includes("invalid_credentials")) {
-              toast.error("Este administrador já existe, mas a senha está incorreta.");
-            } else {
-              toast.error(`Erro: ${loginError.message}`);
+            await supabaseClient.auth.signUp({
+              email: adminEmail,
+              password: adminPassword,
+              options: { data: { full_name: "Administrador" } }
+            });
+
+            const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
+            if (!loginError && loginData.user) {
+              await supabaseClient.from('user_roles').upsert({
+                user_id: loginData.user.id,
+                role: 'admin'
+              }, { onConflict: 'user_id' });
+              
+              toast.success("Acesso Administrador configurado!");
+              return;
             }
-            return;
           }
         }
-        toast.error("Acesso negado. Verifique email e senha.");
+        
+        if (error.message.includes("Email not confirmed")) {
+          toast.error("Link de ativação pendente. AÇÃO: No Dashboard do Supabase (Auth > Providers > Email), desmarque 'Confirm Email' para logar agora.");
+        } else if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
+          toast.error("Este administrador já existe, mas a senha está incorreta.");
+        } else {
+          toast.error(`Erro: ${error.message}`);
+        }
       } else {
         toast.success("Bem-vindo ao Painel Admin");
       }
     } catch (error) {
       console.error("Erro técnico no login:", error);
-      toast.error("Erro no servidor de autenticação.");
+      toast.error("Erro de conexão.");
     } finally {
       setIsLoggingIn(false);
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!adminEmail) {
+      toast.error("Digite seu email de administrador primeiro.");
+      return;
+    }
+    try {
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { error } = await supabase.auth.resetPasswordForEmail(adminEmail, {
+        redirectTo: window.location.origin + "/admin",
+      });
+      if (error) throw error;
+      toast.success("Email de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (error: any) {
+      toast.error(error.message);
+    }
+  };
+
   if (authLoading || adminLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
-        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/20 via-background to-fuchsia-900/10 pointer-events-none" />
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
-  // Not logged in or not admin: Show login card on /admin
   if (!user || !isAdmin) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
-        {/* Background effects like standard site */}
-        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/10 via-background to-blue-900/10 pointer-events-none" />
-        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
-        <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+        <div className="fixed inset-0 bg-background pointer-events-none" />
+        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/3 rounded-full blur-[120px] pointer-events-none" />
+        <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/3 rounded-full blur-[120px] pointer-events-none" />
 
-        <div className="w-full max-w-md bg-card/80 backdrop-blur-sm rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
+        <div className="w-full max-w-md bg-card/50 backdrop-blur-md rounded-2xl border border-border p-8 relative z-10 shadow-xl">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
               <Key className="h-8 w-8 text-primary" />
             </div>
             <h1 className="text-3xl font-bold tracking-tight mb-2">Painel Admin</h1>
-            <p className="text-muted-foreground">Acesso restrito para administradores</p>
+            <p className="text-muted-foreground">Acesso restrito</p>
           </div>
 
           <form onSubmit={handleAdminLogin} className="space-y-4">
@@ -112,31 +122,40 @@ const AdminDashboard = () => {
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 autoComplete="email"
-                className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+                className="bg-background/40 border-border/50"
                 required
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Senha</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Senha</label>
+                <button 
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-xs text-primary hover:underline transition-all"
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
               <Input
                 type="password"
                 placeholder="••••••••"
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 autoComplete="current-password"
-                className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+                className="bg-background/40 border-border/50"
                 required
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all active:scale-[0.98] mt-2"
               disabled={isLoggingIn}
             >
               {isLoggingIn ? "Autenticando..." : "Entrar no Painel"}
             </Button>
             
-            <div className="pt-4 border-t border-border/50 mt-6 space-y-4">
+            <div className="pt-6 border-t border-border/50 mt-6">
               <Button 
                 variant="ghost" 
                 type="button"
@@ -150,11 +169,9 @@ const AdminDashboard = () => {
           </form>
         </div>
 
-        {/* Informative footer for first-time setup */}
-        <div className="mt-8 text-center relative z-10 max-w-sm mx-auto">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Se for o seu primeiro acesso, entre com o email configurado. 
-            <strong> Importante:</strong> Se aparecer "Email not confirmed", vá ao seu Dashboard do Supabase &gt; Auth &gt; Providers &gt; Email e desative a opção "Confirm Email".
+        <div className="mt-8 text-center relative z-10 max-w-sm px-4">
+          <p className="text-[10px] text-muted-foreground leading-relaxed uppercase tracking-widest opacity-60">
+            Acesso administrativo monitorado • TLS 1.3
           </p>
         </div>
       </div>
