@@ -82,8 +82,10 @@ const AuthPage = () => {
 
         const { error } = await signIn(email, password);
         if (error) {
-          if (error.message.includes("Invalid login credentials")) {
+          if (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) {
             toast.error("Email ou senha incorretos");
+          } else if (error.message === "Failed to fetch") {
+            toast.error("Erro de conexão: Não foi possível alcançar o servidor. Verifique suas chaves do Supabase nas variáveis de ambiente.");
           } else {
             toast.error(error.message);
           }
@@ -96,6 +98,8 @@ const AuthPage = () => {
         if (error) {
           if (error.message.includes("User already registered")) {
             toast.error("Este email já está cadastrado");
+          } else if (error.message === "Failed to fetch") {
+            toast.error("Erro de conexão: Não foi possível alcançar o servidor. Verifique suas chaves do Supabase nas variáveis de ambiente.");
           } else {
             toast.error(error.message);
           }
@@ -105,7 +109,11 @@ const AuthPage = () => {
         }
       }
     } catch (error) {
-      toast.error("Ocorreu um erro. Tente novamente.");
+      if (error instanceof Error && error.message === "Failed to fetch") {
+        toast.error("Erro de conexão: Verifique as credenciais do Supabase.");
+      } else {
+        toast.error("Ocorreu um erro. Tente novamente.");
+      }
     } finally {
       setIsSubmitting(false);
     }
