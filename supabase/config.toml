@@ -1,0 +1,40 @@
+project_id = "ysbybtrbfxjfjpybmlob"
+
+[functions.create-payment]
+verify_jwt = false
+
+[functions.verify-payment]
+verify_jwt = false
+
+[functions.infinitepay-checkout]
+verify_jwt = false
+
+[functions.infinitepay-webhook]
+verify_jwt = false
+
+[functions.deliver-keys]
+verify_jwt = false
+
+[functions.create-order]
+verify_jwt = false
+
+[functions.get-order-keys]
+verify_jwt = false
+
+[functions.send-phone-verification]
+verify_jwt = false
+
+[functions.verify-phone-code]
+verify_jwt = false
+
+[functions.auto-deliver-keys]
+verify_jwt = false
+
+[functions.blackcat-create-payment]
+verify_jwt = false
+
+[functions.blackcat-webhook]
+verify_jwt = false
+
+[functions.blackcat-verify-payment]
+verify_jwt = false

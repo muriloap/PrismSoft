@@ -1,0 +1,245 @@
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+// =======================================================
+// INPUT VALIDATION SCHEMA
+// =======================================================
+
+const AutoDeliverKeysSchema = z.object({
+  orderId: z.string().uuid({ message: "ID do pedido inválido" }),
+  orderNsu: z.string().min(1, { message: "NSU do pedido obrigatório" }),
+});
+
+interface OrderItem {
+  id: string;
+  product_id: string;
+  variation_id: string;
+  quantity: number;
+  product_name: string;
+  variation_name: string;
+}
+
+const handler = async (req: Request): Promise<Response> => {
+  console.log('Auto deliver keys request received');
+  
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+    // Use service role client for all operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // =======================================================
+    // INPUT VALIDATION WITH ZOD
+    // =======================================================
+    
+    let rawBody: unknown;
+    try {
+      rawBody = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: 'JSON inválido' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const parseResult = AutoDeliverKeysSchema.safeParse(rawBody);
+    
+    if (!parseResult.success) {
+      console.error('Validation error:', parseResult.error.issues);
+      const firstError = parseResult.error.issues[0]?.message || 'Dados inválidos';
+      return new Response(
+        JSON.stringify({ success: false, error: firstError }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const body = parseResult.data;
+    console.log('Processing auto delivery for order:', body.orderId, 'NSU:', body.orderNsu);
+
+    // Get order details - verify it exists and is paid
+    const { data: order, error: orderError } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('id', body.orderId)
+      .single();
+
+    if (orderError || !order) {
+      console.error('Order not found:', orderError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Pedido não encontrado' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Verify NSU matches for security
+    if (order.order_nsu !== body.orderNsu) {
+      console.error('NSU mismatch:', order.order_nsu, '!=', body.orderNsu);
+      return new Response(
+        JSON.stringify({ success: false, error: 'NSU do pedido não confere' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if order is paid
+    if (order.status !== 'paid') {
+      console.error('Order not paid:', order.status);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Pedido ainda não foi pago' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check if keys already delivered
+    const { data: existingDelivery } = await supabase
+      .from('delivered_keys')
+      .select('id')
+      .eq('order_id', body.orderId)
+      .limit(1);
+
+    if (existingDelivery && existingDelivery.length > 0) {
+      console.log('Keys already delivered for order:', body.orderId);
+      
+      // Return existing delivered keys
+      const { data: deliveredKeys } = await supabase
+        .from('delivered_keys')
+        .select('*')
+        .eq('order_id', body.orderId);
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Keys já foram entregues',
+          deliveredKeys: deliveredKeys || []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Get order items
+    const { data: orderItems, error: itemsError } = await supabase
+      .from('order_items')
+      .select('*')
+      .eq('order_id', body.orderId);
+
+    if (itemsError || !orderItems || orderItems.length === 0) {
+      console.error('Order items not found:', itemsError);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Itens do pedido não encontrados' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('Order items found:', orderItems.length);
+
+    const deliveredKeys: Array<{
+      order_item_id: string;
+      product_name: string;
+      variation_name: string;
+      key_value: string;
+    }> = [];
+
+    // Process each order item
+    for (const item of orderItems as OrderItem[]) {
+      console.log(`Processing item: ${item.product_name} - ${item.variation_name}, qty: ${item.quantity}`);
+      
+      // Get available keys for this product/variation
+      const { data: availableKeys, error: keysError } = await supabase
+        .from('product_keys')
+        .select('*')
+        .eq('product_id', item.product_id)
+        .eq('variation_id', item.variation_id)
+        .eq('status', 'available')
+        .limit(item.quantity);
+
+      if (keysError) {
+        console.error('Error fetching keys:', keysError);
+        continue;
+      }
+
+      if (!availableKeys || availableKeys.length < item.quantity) {
+        console.warn(`Not enough keys for ${item.product_name}. Available: ${availableKeys?.length || 0}, needed: ${item.quantity}`);
+        // Continue with available keys
+      }
+
+      const keysToDeliver = availableKeys || [];
+      
+      for (const key of keysToDeliver) {
+        // Mark key as sold - THIS MAKES IT UNAVAILABLE
+        const { error: updateError } = await supabase
+          .from('product_keys')
+          .update({
+            status: 'sold',
+            sold_to: order.user_id || null,
+            sold_at: new Date().toISOString()
+          })
+          .eq('id', key.id);
+
+        if (updateError) {
+          console.error('Error updating key status:', updateError);
+          continue;
+        }
+
+        console.log(`Key ${key.id} marked as sold`);
+
+        // Create delivered key record
+        const { error: deliverError } = await supabase
+          .from('delivered_keys')
+          .insert({
+            order_id: body.orderId,
+            order_item_id: item.id,
+            product_key_id: key.id,
+            key_value: key.key_value
+          });
+
+        if (deliverError) {
+          console.error('Error creating delivery record:', deliverError);
+          continue;
+        }
+
+        deliveredKeys.push({
+          order_item_id: item.id,
+          product_name: item.product_name,
+          variation_name: item.variation_name,
+          key_value: key.key_value
+        });
+      }
+    }
+
+    // Update order status to delivered
+    await supabase
+      .from('orders')
+      .update({ status: 'delivered' })
+      .eq('id', body.orderId);
+
+    console.log(`Auto-delivered ${deliveredKeys.length} keys for order ${body.orderId}`);
+
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: `${deliveredKeys.length} keys entregues automaticamente`,
+        deliveredKeys 
+      }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+
+  } catch (error: unknown) {
+    console.error('Error in auto-deliver-keys function:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: 'Erro interno' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+};
+
+serve(handler);
