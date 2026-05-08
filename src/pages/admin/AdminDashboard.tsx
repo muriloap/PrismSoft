@@ -45,22 +45,21 @@ const AdminDashboard = () => {
           const { error: loginError, data: loginData } = await signIn(adminEmail, adminPassword);
           
           if (!loginError && loginData.user) {
-            // 3. Garante o cargo de admin
             await supabaseClient.from('user_roles').upsert({
               user_id: loginData.user.id,
               role: 'admin'
             }, { onConflict: 'user_id' });
             
-            toast.success("Acesso Administrador sincronizado com sucesso!");
+            toast.success("Acesso Administrador sincronizado!");
             return;
           } else if (loginError) {
             console.error("Erro no login após tentativa de signUp:", loginError.message);
             if (loginError.message.includes("Email not confirmed")) {
-              toast.error("Conta criada! Mas você precisa confirmar o email ou desativar 'Confirm Email' no seu Dashboard do Supabase.");
+              toast.error("Conta criada! AÇÃO NECESSÁRIA: No Dashboard do Supabase (Auth > Providers > Email), desmarque 'Confirm Email' para acessar sem verificar o link.");
             } else if (loginError.message.includes("Invalid login credentials") || loginError.message.includes("invalid_credentials")) {
-              toast.error("Este administrador já existe no Supabase, mas a senha digitada está incorreta para o registro atual.");
+              toast.error("Este administrador já existe, mas a senha está incorreta.");
             } else {
-              toast.error(`Falha no login: ${loginError.message}`);
+              toast.error(`Erro: ${loginError.message}`);
             }
             return;
           }
@@ -79,8 +78,9 @@ const AdminDashboard = () => {
 
   if (authLoading || adminLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
+        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/20 via-background to-fuchsia-900/10 pointer-events-none" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -88,18 +88,18 @@ const AdminDashboard = () => {
   // Not logged in or not admin: Show login card on /admin
   if (!user || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
         {/* Background effects like standard site */}
-        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/20 via-background to-fuchsia-900/10 pointer-events-none" />
-        <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="fixed bottom-1/4 right-1/4 w-96 h-96 bg-fuchsia-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="fixed inset-0 bg-gradient-to-br from-purple-900/10 via-background to-blue-900/10 pointer-events-none" />
+        <div className="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
+        <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-500/5 rounded-full blur-[120px] pointer-events-none animate-pulse" />
 
-        <div className="w-full max-w-md bg-card rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
+        <div className="w-full max-w-md bg-card/80 backdrop-blur-sm rounded-2xl border border-border p-8 relative z-10 shadow-2xl">
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
               <Key className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Painel de Controle</h1>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">Painel Admin</h1>
             <p className="text-muted-foreground">Acesso restrito para administradores</p>
           </div>
 
@@ -112,6 +112,7 @@ const AdminDashboard = () => {
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
                 autoComplete="email"
+                className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
                 required
               />
             </div>
@@ -123,22 +124,23 @@ const AdminDashboard = () => {
                 value={adminPassword}
                 onChange={(e) => setAdminPassword(e.target.value)}
                 autoComplete="current-password"
+                className="bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
                 required
               />
             </div>
             <Button 
               type="submit" 
-              className="w-full"
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
               disabled={isLoggingIn}
             >
               {isLoggingIn ? "Autenticando..." : "Entrar no Painel"}
             </Button>
             
-            <div className="pt-4 border-t border-border mt-6">
+            <div className="pt-4 border-t border-border/50 mt-6 space-y-4">
               <Button 
                 variant="ghost" 
                 type="button"
-                className="w-full text-muted-foreground" 
+                className="w-full text-muted-foreground hover:text-foreground transition-colors" 
                 onClick={() => navigate("/")}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -146,6 +148,14 @@ const AdminDashboard = () => {
               </Button>
             </div>
           </form>
+        </div>
+
+        {/* Informative footer for first-time setup */}
+        <div className="mt-8 text-center relative z-10 max-w-sm mx-auto">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Se for o seu primeiro acesso, entre com o email configurado. 
+            <strong> Importante:</strong> Se aparecer "Email not confirmed", vá ao seu Dashboard do Supabase &gt; Auth &gt; Providers &gt; Email e desative a opção "Confirm Email".
+          </p>
         </div>
       </div>
     );

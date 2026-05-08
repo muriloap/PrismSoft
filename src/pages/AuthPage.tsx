@@ -105,6 +105,9 @@ const AuthPage = () => {
               toast.success("Login de Administrador realizado!");
               navigate("/admin");
               return;
+            } else if (retryError?.message.includes("Email not confirmed")) {
+              toast.error("Conta admin criada! AÇÃO NECESSÁRIA: No seu Dashboard do Supabase (Auth > Providers > Email), desative 'Confirm Email' para logar agora.");
+              return;
             }
           }
 
