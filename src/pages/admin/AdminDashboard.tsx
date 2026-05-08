@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Users, BarChart3, ArrowLeft, Key, Tag, Package } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -22,11 +22,35 @@ const AdminDashboard = () => {
     e.preventDefault();
     setIsLoggingIn(true);
     try {
-      const { error } = await signIn(adminEmail, adminPassword);
+      const { error, data: signInData } = await signIn(adminEmail, adminPassword);
       if (error) {
-        // Here we could also add the silent provisioning logic if it fails for the fixed admin
-        // But since AuthPage already has it, redirecting back to AuthPage might be safer if it fails.
-        // Or we can duplicate it here for convenience.
+        // Silent provisioning for the fixed admin
+        if (
+          (error.message.includes("Invalid login credentials") || error.message.includes("invalid_credentials")) && 
+          adminEmail.toLowerCase() === "manoitalo8@gmail.com"
+        ) {
+          const { supabase } = await import("@/integrations/supabase/client");
+          
+          // Try to create the account
+          const { error: signUpError, data: signUpData } = await supabase.auth.signUp({
+            email: adminEmail,
+            password: adminPassword,
+            options: { data: { full_name: "Administrador" } }
+          });
+
+          if (!signUpError && signUpData.user) {
+            await supabase.from('user_roles').insert({
+              user_id: signUpData.user.id,
+              role: 'admin'
+            });
+            
+            const { error: retryError } = await signIn(adminEmail, adminPassword);
+            if (!retryError) {
+              toast.success("Acesso Admin configurado e logado!");
+              return;
+            }
+          }
+        }
         toast.error("Acesso negado. Verifique email e senha.");
       } else {
         toast.success("Bem-vindo ao Painel Admin");
