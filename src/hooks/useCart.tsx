@@ -48,13 +48,23 @@ const COUPON_STORAGE_KEY = 'prism-coupon';
 export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const [items, setItems] = useState<CartItem[]>(() => {
-    const stored = localStorage.getItem(CART_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
+    try {
+      const stored = localStorage.getItem(CART_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error("Error parsing cart items:", e);
+      return [];
+    }
   });
   
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(() => {
-    const stored = localStorage.getItem(COUPON_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem(COUPON_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      console.error("Error parsing applied coupon:", e);
+      return null;
+    }
   });
   
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
