@@ -172,14 +172,16 @@ Deno.serve(async (req) => {
             
             // Backup QR code generator if base64 is missing
             const qrBase64 = tx.paymentData?.qrCodeBase64;
-            const pixCode = tx.paymentData?.copyPaste || tx.paymentData?.qrCode || '';
+            const pixCode = tx.paymentData?.copyPaste || tx.paymentData?.qrCode || tx.paymentData?.pixCode || '';
+            const expiresAt = tx.paymentData?.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
             payment = {
               id: tx.transactionId,
               pixCode: pixCode,
               qrCodeImage: qrBase64 
                 ? `data:image/png;base64,${qrBase64}` 
-                : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`,
+                : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
+              expiresDate: expiresAt,
               publicPaymentUrl: tx.invoiceUrl,
             };
             // Atualiza o payment_id no pedido

@@ -25,6 +25,11 @@ const Header = () => {
       }
 
       try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (!authUser) return;
+
+        // Check if profile exists before seeking it to avoid 404 logs if possible, 
+        // though Supabase client usually hides those 404s for .maybeSingle()
         const { data, error } = await supabase
           .from("profiles")
           .select("avatar_url")

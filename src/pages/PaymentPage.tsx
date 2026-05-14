@@ -50,15 +50,19 @@ const PaymentPage = () => {
 
   // Countdown timer
   useEffect(() => {
-    if (!paymentData?.expiresDate) return;
+    if (!paymentData?.expiresDate && !paymentData?.pixCode) return;
+    
+    // If we have pixCode but no expiresDate, use a default 30 min from now
+    const targetDate = paymentData.expiresDate 
+      ? new Date(paymentData.expiresDate).getTime() 
+      : new Date().getTime() + 30 * 60 * 1000;
 
     const updateTimer = () => {
       const now = new Date().getTime();
-      const expires = new Date(paymentData.expiresDate).getTime();
-      const diff = expires - now;
+      const diff = targetDate - now;
 
       if (diff <= 0) {
-        setTimeLeft('Expirado');
+        setTimeLeft('EXPIRADO');
         setPaymentStatus('expired');
         return;
       }
@@ -71,7 +75,7 @@ const PaymentPage = () => {
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [paymentData?.expiresDate]);
+  }, [paymentData]);
 
   // Auto-check payment status every 5 seconds
   useEffect(() => {
@@ -130,20 +134,43 @@ const PaymentPage = () => {
   }, [paymentData, paymentStatus, toast, navigate]);
 
   const handleCopyPixCode = async () => {
-    if (!paymentData?.pixCode) return;
+    const code = paymentData?.pixCode;
+    console.log("Tentando copiar código PIX:", code ? "Código presente" : "Código AUSENTE");
+    
+    if (!code) {
+      toast({
+        title: "Código não disponível",
+        description: "Aguarde o carregamento do código PIX.",
+        variant: "destructive"
+      });
+      return;
+    }
     
     try {
-      await navigator.clipboard.writeText(paymentData.pixCode);
+      // Fallback for copying if navigator.clipboard fails
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(code);
+      } else {
+        // Legacy fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = code;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      
       setCopied(true);
       toast({
         title: "Código copiado!",
         description: "Cole no seu aplicativo de pagamento.",
       });
       setTimeout(() => setCopied(false), 3000);
-    } catch {
+    } catch (err) {
+      console.error("Erro ao copiar:", err);
       toast({
         title: "Erro ao copiar",
-        description: "Tente copiar manualmente.",
+        description: "Tente copiar o link de pagamento ou atualize a página.",
         variant: "destructive"
       });
     }
@@ -404,21 +431,26 @@ const PaymentPage = () => {
                 <div className="relative mb-8 group">
                   <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
                   <div className="relative bg-white p-5 rounded-2xl shadow-xl flex items-center justify-center min-w-[200px] min-h-[200px]">
-                    {paymentData.qrCodeImage ? (
+                    {(paymentData.qrCodeImage || paymentData.pixCode) ? (
                       <img 
-                        src={paymentData.qrCodeImage} 
+                        src={paymentData.qrCodeImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`} 
                         alt="QR Code PIX" 
-                        className="w-52 h-52 transition-opacity duration-300"
-                        onLoad={(e) => (e.currentTarget.style.opacity = '1')}
+                        className="w-52 h-52 transition-all duration-300"
+                        onLoad={(e) => {
+                          e.currentTarget.classList.add('opacity-100');
+                        }}
                         onError={(e) => {
-                          console.error("QR Code image fail, using fallback generator");
-                          e.currentTarget.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`;
+                          console.error("QR image fail, applying fallback");
+                          const fallback = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`;
+                          if (e.currentTarget.src !== fallback) {
+                            e.currentTarget.src = fallback;
+                          }
                         }}
                       />
                     ) : (
                       <div className="w-52 h-52 flex flex-col items-center justify-center text-muted-foreground gap-2">
-                        <RefreshCw className="h-8 w-8 animate-spin" />
-                        <span className="text-xs">Gerando QR Code...</span>
+                        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                        <span className="text-xs font-medium">Buscando PIX...</span>
                       </div>
                     )}
                   </div>

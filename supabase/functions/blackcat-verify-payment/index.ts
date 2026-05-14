@@ -4,49 +4,52 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
 
 Deno.serve(async (req) => {
+  // Explicitly handle preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
   try {
     const apiKey = Deno.env.get('BLACKCAT_API_KEY')?.trim();
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-
     if (!apiKey) {
-      return new Response(JSON.stringify({ success: false, error: 'Gateway não configurado (API Key)' }),
+      console.error('BLACKCAT_API_KEY not configured');
+      return new Response(JSON.stringify({ success: false, error: 'Configuração da API pendente' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
     
     let body;
     try {
       body = await req.json();
     } catch(e) {
-      return new Response(JSON.stringify({ success: false, error: 'JSON inválido' }),
+      console.error('Json parse error:', e);
+      return new Response(JSON.stringify({ success: false, error: 'Payload inválido' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { chargeId, orderId, orderNsu } = body;
-
     if (!chargeId) {
-      return new Response(JSON.stringify({ success: false, error: 'ID da transação não informado' }),
+      return new Response(JSON.stringify({ success: false, error: 'ChargeId obrigatório' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Verificando status do pagamento ${chargeId} para pedido ${orderId} (NSU: ${orderNsu})`);
+    console.log(`Checking charge: ${chargeId} (Order: ${orderId})`);
     
     const resp = await fetch(`${BLACKCAT_API_URL}/sales/get-sale/${chargeId}`, {
       method: 'GET',
-      headers: {
-        'X-API-Key': apiKey,
-      },
+      headers: { 'X-API-Key': apiKey },
     });
 
     const data = await resp.json();
