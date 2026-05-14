@@ -33,21 +33,46 @@ const PaymentPage = () => {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'expired'>('pending');
   const [timeLeft, setTimeLeft] = useState<string>('');
 
-  // Get payment data from URL params (stored in localStorage)
+  // Get payment data from localStorage and verify with DB
   useEffect(() => {
+    const fetchFreshOrderData = async (orderId: string) => {
+      try {
+        const { data: order, error } = await supabase
+          .from('orders')
+          .select('status, payment_id')
+          .eq('id', orderId)
+          .single();
+        
+        if (!error && order) {
+          if (order.status === 'paid' || order.status === 'delivered') {
+            setPaymentStatus('paid');
+          }
+        }
+      } catch (e) {
+        console.error("Error refreshing order status:", e);
+      }
+    };
+
     const storedPayment = localStorage.getItem('current-payment');
     if (storedPayment) {
       try {
         const data = JSON.parse(storedPayment);
+        if (!data || !data.id) {
+          throw new Error("Dados de pagamento incompletos");
+        }
         setPaymentData(data);
+        if (data.orderId) {
+          fetchFreshOrderData(data.orderId);
+        }
         setLoading(false);
-      } catch {
+      } catch (err) {
+        console.error("Error parsing payment data:", err);
         setLoading(false);
       }
     } else {
       setLoading(false);
     }
-  }, []);
+  }, [navigate]);
 
   // Countdown timer
   useEffect(() => {
@@ -148,34 +173,41 @@ const PaymentPage = () => {
     }
     
     try {
-      // Modern clipboard API
-      if (navigator.clipboard && window.isSecureContext) {
+      // Logic for copying to clipboard
+      if (document.queryCommandSupported && document.queryCommandSupported('copy')) {
+        const textarea = document.createElement('textarea');
+        textarea.value = code;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        textarea.style.top = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        try {
+          const success = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (!success) throw new Error('Copiado sem sucesso');
+        } catch (e) {
+          document.body.removeChild(textarea);
+          throw e;
+        }
+      } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(code);
       } else {
-        // Superior fallback
-        const input = document.createElement('input');
-        input.value = code;
-        input.style.position = 'fixed';
-        input.style.opacity = '0';
-        document.body.appendChild(input);
-        input.focus();
-        input.select();
-        const success = document.execCommand('copy');
-        document.body.removeChild(input);
-        if (!success) throw new Error('ExecCommand copy failed');
+        throw new Error('Clipboard não suportado');
       }
       
       setCopied(true);
       toast({
-        title: "Sucesso!",
-        description: "Código PIX copiado. Agora cole no seu banco.",
+        title: "Copiado!",
+        description: "Código PIX pronto para colar no seu banco.",
       });
-      setTimeout(() => setCopied(false), 3000);
+      setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Erro ao copiar:", err);
       toast({
         title: "Erro ao copiar",
-        description: "Não foi possível copiar automaticamente. Selecione o código manualmente.",
+        description: "Não foi possível copiar automaticamente. Selecione e copie manualmente.",
         variant: "destructive"
       });
     }

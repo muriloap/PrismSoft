@@ -41,7 +41,7 @@ async function deliverKeysForOrder(supabase: any, orderId: string) {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders });
 
   try {
     const source = req.headers.get('x-webhook-source');

@@ -34,7 +34,7 @@ const CreateOrderSchema = z.object({
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   try {
@@ -170,11 +170,10 @@ Deno.serve(async (req) => {
           const bcData = await bcResp.json();
           console.log('BlackCat Create Response:', JSON.stringify(bcData));
 
-          if (bcData.success && bcData.data) {
-            const tx = bcData.data;
+          if (bcData.success && (bcData.data || bcData.sale)) {
+            const tx = bcData.data || bcData.sale;
             
-            // Comprehensive field mapping for PIX and payment data
-            // BlackCat sometimes nests pix info or uses direct fields
+            // Comprehensive mapping
             const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
             
             // Extract PIX code (Copia e Cola)
@@ -185,8 +184,10 @@ Deno.serve(async (req) => {
                            pd.emv || 
                            pd.copia_e_cola || 
                            pd.code || 
+                           pd.pix_code ||
                            tx.copyPaste || 
                            tx.pix_code || 
+                           tx.payload ||
                            '';
             
             // Extract QR Code (Base64)
@@ -195,6 +196,7 @@ Deno.serve(async (req) => {
                             pd.qrContent || 
                             pd.qrCodeContent || 
                             pd.base64 || 
+                            pd.qr_code ||
                             tx.qr_code_base64 ||
                             '';
             
@@ -203,26 +205,33 @@ Deno.serve(async (req) => {
                              pd.expires_at || 
                              pd.expirationDate || 
                              pd.valid_until ||
+                             pd.expires_in ||
                              new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
-            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid;
+            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id;
             
-            payment = {
-              id: transactionId,
-              pixCode: pixCode,
-              qrCodeImage: qrBase64 
-                ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
-                : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
-              expiresDate: expiresAt,
-              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url,
-            };
-            
-            // Atualiza o payment_id no pedido
-            if (transactionId) {
-              await supabase.from('orders').update({ payment_id: transactionId }).eq('id', order.id);
+            if (pixCode) {
+              payment = {
+                id: transactionId,
+                pixCode: pixCode,
+                qrCodeImage: qrBase64 
+                  ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
+                  : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
+                expiresDate: expiresAt,
+                publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url || tx.checkout_url,
+              };
+              
+              // Atualiza o payment_id no pedido
+              if (transactionId) {
+                await supabase.from('orders').update({ payment_id: String(transactionId) }).eq('id', order.id);
+              }
+            } else {
+              console.error('PIX Code missing in BlackCat response:', JSON.stringify(bcData));
+              throw new Error('Falha ao gerar código PIX. Tente novamente.');
             }
           } else {
-            console.error('BlackCat API reported failure or missing data:', bcData);
+            console.error('BlackCat API ERROR:', JSON.stringify(bcData));
+            // Return dummy payment if in dev mode? No, better report error properly
           }
         }
       } catch (bcError) {
@@ -238,7 +247,7 @@ Deno.serve(async (req) => {
 
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ success: false, error: err.message }),
+      JSON.stringify({ success: false, error: err.message || 'Erro interno no servidor' }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

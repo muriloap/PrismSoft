@@ -12,7 +12,7 @@ const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
 Deno.serve(async (req) => {
   // CORS Preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   try {

@@ -28,14 +28,13 @@ const Header = () => {
         const { data, error } = await supabase
           .from("profiles")
           .select("avatar_url")
-          .eq("id", user.id)
-          .limit(1);
+          .eq("id", user.id);
         
         if (!error && data && data.length > 0) {
           setAvatarUrl(data[0].avatar_url);
         }
       } catch (err) {
-        // Silent
+        console.error("Profile fetch error:", err);
       }
     };
 
