@@ -1,10 +1,10 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
@@ -47,23 +47,40 @@ async function deliverKeysForOrder(supabase: any, orderId: string) {
   return delivered;
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
 
   try {
     const apiKey = Deno.env.get('BLACKCAT_API_KEY');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
     if (!apiKey) {
-      return new Response(JSON.stringify({ success: false, error: 'API Key não configurada' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: false, error: 'Gateway não configurado' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ success: false, error: 'Erro de ambiente' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
 
-    const raw = await req.json();
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    let raw: any;
+    try { 
+      raw = await req.json(); 
+    } catch (e) {
+      return new Response(JSON.stringify({ success: false, error: 'JSON inválido' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     const parsed = Schema.safeParse(raw);
     if (!parsed.success) {
       return new Response(JSON.stringify({ success: false, error: 'Dados inválidos' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { chargeId, orderId } = parsed.data;
@@ -75,7 +92,7 @@ serve(async (req) => {
 
     if (!resp.ok || !data.success) {
       return new Response(JSON.stringify({ success: false, error: data.message || 'Erro ao consultar' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const status = data.data?.status;
@@ -101,11 +118,12 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       payment: { status, isPaid, isExpired },
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
-  } catch (e) {
+  } catch (e: any) {
     console.error('blackcat-verify-payment error:', e);
-    return new Response(JSON.stringify({ success: false, error: 'Erro interno' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ success: false, error: 'Erro interno', details: e.message }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
+
