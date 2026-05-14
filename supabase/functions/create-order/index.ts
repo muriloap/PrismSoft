@@ -170,8 +170,8 @@ Deno.serve(async (req) => {
           const bcData = await bcResp.json();
           console.log('BlackCat Create Response:', JSON.stringify(bcData));
 
-          if (bcData.success && (bcData.data || bcData.sale)) {
-            const tx = bcData.data || bcData.sale;
+          if (bcData.success && (bcData.data || bcData.sale || bcData.payment)) {
+            const tx = bcData.data || bcData.sale || bcData.payment;
             
             // Comprehensive mapping
             const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
@@ -198,6 +198,7 @@ Deno.serve(async (req) => {
                             pd.base64 || 
                             pd.qr_code ||
                             tx.qr_code_base64 ||
+                            tx.qrcode ||
                             '';
             
             // Extract expiration
@@ -206,19 +207,20 @@ Deno.serve(async (req) => {
                              pd.expirationDate || 
                              pd.valid_until ||
                              pd.expires_in ||
+                             tx.expires_at ||
                              new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
-            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id;
+            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id || tx.external_id;
             
             if (pixCode) {
               payment = {
-                id: transactionId,
+                id: transactionId ? String(transactionId) : `PIX-${Date.now()}`,
                 pixCode: pixCode,
                 qrCodeImage: qrBase64 
                   ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
                   : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
                 expiresDate: expiresAt,
-                publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url || tx.checkout_url,
+                publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url || tx.checkout_url || '',
               };
               
               // Atualiza o payment_id no pedido
@@ -227,11 +229,11 @@ Deno.serve(async (req) => {
               }
             } else {
               console.error('PIX Code missing in BlackCat response:', JSON.stringify(bcData));
-              throw new Error('Falha ao gerar código PIX. Tente novamente.');
+              throw new Error('O gateway não retornou o código PIX. Tente novamente.');
             }
           } else {
             console.error('BlackCat API ERROR:', JSON.stringify(bcData));
-            // Return dummy payment if in dev mode? No, better report error properly
+            throw new Error(bcData.message || 'Erro na comunicação com o gateway de pagamento.');
           }
         }
       } catch (bcError) {

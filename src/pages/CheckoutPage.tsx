@@ -184,7 +184,7 @@ const CheckoutPage = () => {
             value: total 
           }));
           clearCart();
-          navigate('/pagamento');
+          navigate(`/pagamento?order_nsu=${encodeURIComponent(orderNsu)}`);
         } else {
           throw new Error('Não foi possível gerar o código PIX. O pedido foi criado, tente pagar novamente mais tarde.');
         }

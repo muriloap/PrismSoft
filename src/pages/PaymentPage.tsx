@@ -35,17 +35,33 @@ const PaymentPage = () => {
 
   // Get payment data from localStorage and verify with DB
   useEffect(() => {
-    const fetchFreshOrderData = async (orderId: string) => {
+    const fetchFreshOrderData = async (orderId?: string, orderNsu?: string) => {
       try {
-        const { data: order, error } = await supabase
-          .from('orders')
-          .select('status, payment_id')
-          .eq('id', orderId)
-          .single();
+        console.log("Fetching fresh order data...", { orderId, orderNsu });
         
-        if (!error && order) {
+        const query = supabase.from('orders').select('*');
+        if (orderId) query.eq('id', orderId);
+        else if (orderNsu) query.eq('order_nsu', orderNsu);
+        else throw new Error("No identifiers to fetch order");
+
+        const { data: order, error } = await query.single();
+        
+        if (error) throw error;
+        
+        if (order) {
           if (order.status === 'paid' || order.status === 'delivered') {
             setPaymentStatus('paid');
+          }
+          
+          // Re-hydration of payment data if missing
+          if (order.payment_id && (!paymentData || !paymentData.id)) {
+            setPaymentData(prev => ({
+              ...prev!,
+              id: order.payment_id,
+              orderId: order.id,
+              orderNsu: order.order_nsu,
+              value: order.total_amount
+            }));
           }
         }
       } catch (e) {
@@ -54,21 +70,26 @@ const PaymentPage = () => {
     };
 
     const storedPayment = localStorage.getItem('current-payment');
+    const params = new URLSearchParams(window.location.search);
+    const nsuParam = params.get('order_nsu');
+
     if (storedPayment) {
       try {
         const data = JSON.parse(storedPayment);
-        if (!data || !data.id) {
-          throw new Error("Dados de pagamento incompletos");
-        }
         setPaymentData(data);
-        if (data.orderId) {
-          fetchFreshOrderData(data.orderId);
-        }
+        fetchFreshOrderData(data.orderId, data.orderNsu || nsuParam || undefined);
         setLoading(false);
       } catch (err) {
         console.error("Error parsing payment data:", err);
-        setLoading(false);
+        if (nsuParam) {
+          fetchFreshOrderData(undefined, nsuParam);
+        } else {
+          setLoading(false);
+        }
       }
+    } else if (nsuParam) {
+      // Try to recover using NSU from URL
+      fetchFreshOrderData(undefined, nsuParam).finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
