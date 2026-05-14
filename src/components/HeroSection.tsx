@@ -1,12 +1,18 @@
-import { MessageCircle, Headphones } from "lucide-react";
+import { MessageCircle, Headphones, ArrowRight, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { useCategories } from "@/hooks/useCategories";
 import heroBg from "@/assets/hero-bg.jpg";
 
-const HeroSection = () => {
-  const navigate = useNavigate();
+interface HeroSectionProps {
+  onCategorySelect?: (category: string | null) => void;
+}
 
-  return <section className="relative min-h-[80vh] flex items-center overflow-hidden">
+const HeroSection = ({ onCategorySelect }: HeroSectionProps) => {
+  const navigate = useNavigate();
+  const { categories } = useCategories();
+
+  return <section className="relative min-h-[90vh] flex items-center overflow-hidden">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <img src={heroBg} alt="Hero background" className="h-full w-full object-cover opacity-40" />
@@ -45,11 +51,14 @@ const HeroSection = () => {
           </p>
 
           {/* CTA Buttons */}
-          <div className="flex flex-wrap gap-4 animate-slide-up" style={{
+          <div className="flex flex-wrap gap-4 animate-slide-up mb-12" style={{
           animationDelay: "0.2s"
         }}>
-            <Button variant="hero" size="lg" className="gap-2 px-8" onClick={() => navigate("/store")}>
+            <Button variant="hero" size="lg" className="gap-2 px-8 min-w-[160px]" onClick={() => {
+              if (onCategorySelect) onCategorySelect(null);
+            }}>
               Ver Produtos
+              <ArrowRight className="h-4 w-4" />
             </Button>
             <Button variant="heroOutline" size="lg" className="gap-2" asChild>
               <a href="https://discord.gg/HEKCFhaXwF" target="_blank" rel="noopener noreferrer">
@@ -57,12 +66,25 @@ const HeroSection = () => {
                 Comunidade
               </a>
             </Button>
-            <Button variant="heroOutline" size="lg" className="gap-2" asChild>
-              <a href="https://discord.gg/HEKCFhaXwF" target="_blank" rel="noopener noreferrer">
-                <Headphones className="h-5 w-5" />
-                Suporte
-              </a>
-            </Button>
+          </div>
+
+          {/* Categories Quick Link */}
+          <div className="animate-fade-in" style={{ animationDelay: "0.4s" }}>
+            <p className="text-sm font-medium text-muted-foreground/60 mb-4 flex items-center gap-2 uppercase tracking-widest">
+              <Tag className="h-3 w-3" />
+              Categorias Populares
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {categories.slice(0, 5).map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => onCategorySelect?.(category.name)}
+                  className="px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-medium hover:bg-purple-500/20 hover:border-purple-500/50 hover:text-white transition-all backdrop-blur-sm"
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

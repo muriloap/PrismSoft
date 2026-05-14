@@ -38,7 +38,16 @@ export const useProducts = () => {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // If table doesn't exist, we'll handle it gracefully
+        if (error.message.includes('public.products') || error.code === '42P01') {
+          console.error("ERRO CRÍTICO: A tabela 'products' não foi encontrada no seu Supabase.");
+          console.info("SQL para criar a tabela: CREATE TABLE public.products (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL, description TEXT, category TEXT NOT NULL, variations JSONB DEFAULT '[]', features TEXT[] DEFAULT '{}', image_url TEXT, rating NUMERIC DEFAULT 5, is_active BOOLEAN DEFAULT true, created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now());");
+          setProducts([]);
+          return;
+        }
+        throw error;
+      }
 
       // Parse variations from JSONB
       const parsedProducts = (data || []).map(product => ({

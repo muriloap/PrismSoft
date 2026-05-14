@@ -61,7 +61,7 @@ const AdminProducts = () => {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { categories } = useCategories();
-  const { products, loading: productsLoading, createProduct, updateProduct, deleteProduct } = useProducts();
+  const { products, loading: productsLoading, error: productsError, createProduct, updateProduct, deleteProduct } = useProducts();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -264,6 +264,21 @@ const AdminProducts = () => {
         {productsLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+          </div>
+        ) : productsError ? (
+          <div className="text-center py-20 bg-red-500/5 rounded-3xl border border-dashed border-red-500/20 max-w-2xl mx-auto">
+            <Package className="h-12 w-12 mx-auto mb-4 text-red-500 opacity-20" />
+            <h3 className="text-xl font-bold text-red-500 mb-2">Erro de Conexão</h3>
+            <p className="text-muted-foreground mb-6">
+              Não foi possível carregar os produtos do banco de dados. 
+              {productsError.includes('products') && " Verifique se a tabela 'products' existe no seu Supabase."}
+            </p>
+            <div className="p-4 bg-muted/50 rounded-xl font-mono text-[10px] text-left overflow-x-auto mb-6">
+              <code>{productsError}</code>
+            </div>
+            <Button onClick={() => window.location.reload()} variant="outline">
+              Tentar Novamente
+            </Button>
           </div>
         ) : products.length === 0 ? (
           <div className="text-center py-12">

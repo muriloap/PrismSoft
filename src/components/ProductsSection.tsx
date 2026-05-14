@@ -5,11 +5,15 @@ import { useProducts } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useState } from "react";
 
-const ProductsSection = () => {
+interface ProductsSectionProps {
+  selectedCategory: string | null;
+  onCategorySelect: (category: string | null) => void;
+}
+
+const ProductsSection = ({ selectedCategory, onCategorySelect }: ProductsSectionProps) => {
   const navigate = useNavigate();
   const { products, loading } = useProducts();
   const { categories } = useCategories();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
   const activeCategories = categories.filter(c => c.is_active);
 
@@ -20,14 +24,22 @@ const ProductsSection = () => {
     return isActive && matchesCategory;
   });
 
+  const handleCategorySelectLocal = (categoryName: string | null) => {
+    onCategorySelect(categoryName);
+    // Smooth scroll to products if selected
+    if (categoryName) {
+      document.getElementById('products-grid')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   return (
-    <section className="py-16 bg-gradient-to-b from-transparent via-muted/20 to-transparent">
+    <section className="py-16 bg-gradient-to-b from-transparent via-muted/20 to-transparent" id="products-grid">
       <div className="container mx-auto px-4">
         {/* Section Title */}
         <div className="mb-10 flex items-center justify-center gap-4">
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
           <h2 className="text-2xl font-bold text-center sm:text-3xl">
-            Produtos em <span className="text-gradient">Destaque</span>
+            {selectedCategory ? `Produtos: ${selectedCategory}` : "Produtos em Destaque"}
           </h2>
           <div className="h-px flex-1 bg-gradient-to-r from-transparent via-border to-transparent" />
         </div>
@@ -37,7 +49,7 @@ const ProductsSection = () => {
           <Button
             variant={selectedCategory === null ? "hero" : "outline"}
             size="sm"
-            onClick={() => setSelectedCategory(null)}
+            onClick={() => handleCategorySelectLocal(null)}
             className="rounded-full"
           >
             Todos
@@ -47,7 +59,7 @@ const ProductsSection = () => {
               key={category.id}
               variant={selectedCategory === category.name ? "hero" : "outline"}
               size="sm"
-              onClick={() => setSelectedCategory(category.name)}
+              onClick={() => handleCategorySelectLocal(category.name)}
               className="rounded-full"
             >
               {category.name}
@@ -61,8 +73,22 @@ const ProductsSection = () => {
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
           </div>
         ) : activeProducts.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Nenhum produto disponível no momento.</p>
+          <div className="text-center py-20 bg-card/30 backdrop-blur-sm rounded-3xl border border-dashed border-border/50">
+            <Filter className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-20" />
+            <p className="text-muted-foreground text-lg mb-2">
+              {selectedCategory 
+                ? `Nenhum produto encontrado em "${selectedCategory}"`
+                : "A loja está vazia no momento."
+              }
+            </p>
+            <p className="text-sm text-muted-foreground/60 max-w-md mx-auto">
+              Se você é o administrador, certifique-se de que a tabela 'products' existe no seu banco de dados e que há produtos ativos cadastrados.
+            </p>
+            {selectedCategory && (
+              <Button variant="ghost" onClick={() => handleCategorySelectLocal(null)} className="mt-4 text-purple-400 hover:text-purple-300">
+                Ver todos os produtos
+              </Button>
+            )}
           </div>
         ) : (
           /* Products Grid */
