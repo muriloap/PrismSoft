@@ -49,12 +49,22 @@ export const useProducts = () => {
         throw error;
       }
 
-      // Parse variations from JSONB
-      const parsedProducts = (data || []).map(product => ({
-        ...product,
-        variations: (Array.isArray(product.variations) ? product.variations : []) as unknown as ProductVariation[],
-        features: product.features || [],
-      }));
+      // Parse variations from JSONB (handle both real JSON and stringified JSON)
+      const parsedProducts = (data || []).map(product => {
+        let variations = product.variations;
+        if (typeof variations === 'string') {
+          try {
+            variations = JSON.parse(variations);
+          } catch (e) {
+            variations = [];
+          }
+        }
+        return {
+          ...product,
+          variations: (Array.isArray(variations) ? variations : []) as unknown as ProductVariation[],
+          features: product.features || [],
+        };
+      });
 
       setProducts(parsedProducts);
     } catch (err: unknown) {
@@ -94,7 +104,7 @@ export const useProducts = () => {
       .from('products')
       .insert({
         ...product,
-        variations: JSON.stringify(product.variations) as unknown as Json,
+        variations: product.variations as any,
       })
       .select()
       .single();
@@ -109,7 +119,7 @@ export const useProducts = () => {
       .from('products')
       .update({
         ...updates,
-        variations: updates.variations ? JSON.stringify(updates.variations) as unknown as Json : undefined,
+        variations: updates.variations ? updates.variations as any : undefined,
       })
       .eq('id', id)
       .select()

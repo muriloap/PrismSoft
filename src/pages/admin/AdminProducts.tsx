@@ -190,6 +190,9 @@ const AdminProducts = () => {
         variations: formData.variations.map((v, i) => ({
           ...v,
           id: v.id || `var-${i}`,
+          price: Number(v.price),
+          originalPrice: v.originalPrice ? Number(v.originalPrice) : undefined,
+          stock: Number(v.stock)
         })),
       };
 

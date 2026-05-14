@@ -65,9 +65,19 @@ const ProductPage = () => {
           console.error('Error fetching product:', error);
           setProduct(null);
         } else {
+          let variations = data.variations;
+          if (typeof variations === 'string') {
+            try {
+              variations = JSON.parse(variations);
+            } catch (e) {
+              console.error('Error parsing variations JSON string:', e);
+              variations = [];
+            }
+          }
+
           const parsedProduct: Product = {
             ...data,
-            variations: (Array.isArray(data.variations) ? data.variations : []) as unknown as ProductVariation[],
+            variations: (Array.isArray(variations) ? variations : []) as unknown as ProductVariation[],
             features: data.features || [],
           };
           setProduct(parsedProduct);
