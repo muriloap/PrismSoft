@@ -3,7 +3,7 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
@@ -171,18 +171,19 @@ Deno.serve(async (req) => {
             const tx = bcData.data;
             
             // Backup QR code generator if base64 is missing
-            const qrBase64 = tx.paymentData?.qrCodeBase64;
-            const pixCode = tx.paymentData?.copyPaste || tx.paymentData?.qrCode || tx.paymentData?.pixCode || '';
-            const expiresAt = tx.paymentData?.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
+            const qrBase64 = pd.qrCodeBase64 || pd.qrcode_base64 || pd.qrContent || pd.qrCodeContent;
+            const pixCode = pd.copyPaste || pd.qrCode || pd.pixCode || pd.payload || pd.emv || pd.copia_e_cola || pd.code || tx.copyPaste || '';
+            const expiresAt = pd.expiresAt || pd.expires_at || pd.expirationDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
             payment = {
-              id: tx.transactionId,
+              id: tx.transactionId || tx.id || tx.txid,
               pixCode: pixCode,
               qrCodeImage: qrBase64 
-                ? `data:image/png;base64,${qrBase64}` 
+                ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
                 : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
               expiresDate: expiresAt,
-              publicPaymentUrl: tx.invoiceUrl,
+              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url,
             };
             // Atualiza o payment_id no pedido
             await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', order.id);

@@ -448,9 +448,19 @@ const PaymentPage = () => {
                         }}
                       />
                     ) : (
-                      <div className="w-52 h-52 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                      <div className="w-52 h-52 flex flex-col items-center justify-center text-muted-foreground gap-3">
                         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
                         <span className="text-xs font-medium">Buscando PIX...</span>
+                        {paymentData.publicPaymentUrl && (
+                          <Button 
+                            variant="link" 
+                            size="sm" 
+                            className="text-[10px] h-auto p-0 text-purple-400"
+                            onClick={() => window.open(paymentData.publicPaymentUrl, '_blank')}
+                          >
+                            Abrir página de pagamento
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

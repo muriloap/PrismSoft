@@ -25,22 +25,17 @@ const Header = () => {
       }
 
       try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (!authUser) return;
-
-        // Check if profile exists before seeking it to avoid 404 logs if possible, 
-        // though Supabase client usually hides those 404s for .maybeSingle()
+        // Use standard select without maybeSingle to avoid 404/406 console logs
         const { data, error } = await supabase
           .from("profiles")
           .select("avatar_url")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (!error && data?.avatar_url) {
-          setAvatarUrl(data.avatar_url);
+          .eq("id", user.id);
+        
+        if (!error && data && data.length > 0) {
+          setAvatarUrl(data[0].avatar_url);
         }
-      } catch (error) {
-        console.error("Error fetching avatar:", error);
+      } catch (err) {
+        // Silent
       }
     };
 
