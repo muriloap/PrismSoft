@@ -13,24 +13,24 @@ const corsHeaders = {
 const CartItemSchema = z.object({
   productId: z.string().uuid({ message: "ID do produto inválido" }),
   productName: z.string().min(1).max(200, { message: "Nome do produto muito longo" }),
-  productImage: z.string().max(500).optional(),
+  productImage: z.string().max(500).optional().nullable(),
   variationId: z.string().min(1).max(100, { message: "ID da variação inválido" }),
   variationName: z.string().min(1).max(200, { message: "Nome da variação muito longo" }),
-  price: z.number().positive().max(999999, { message: "Preço inválido" }),
+  price: z.number().min(0).max(999999, { message: "Preço inválido" }),
   quantity: z.number().int().positive().max(100, { message: "Quantidade inválida" }),
 });
 
 const CreateOrderSchema = z.object({
   items: z.array(CartItemSchema).min(1, { message: "Carrinho vazio" }).max(50, { message: "Muitos itens no carrinho" }),
   email: z.string().email({ message: "Email inválido" }).max(255),
-  customerName: z.string().min(1).max(200).optional(),
-  phone: z.string().max(20).optional(),
-  paymentMethod: z.enum(['pix', 'card']),
-  paymentId: z.string().max(100).optional(),
-  orderNsu: z.string().max(100).optional(),
-  totalAmount: z.number().positive().max(999999, { message: "Valor total inválido" }),
-  discountAmount: z.number().min(0).max(999999).optional(),
-  couponCode: z.string().max(50).optional(),
+  customerName: z.string().min(1).max(200).optional().nullable(),
+  phone: z.string().max(30).optional().nullable(),
+  paymentMethod: z.enum(['pix', 'card', 'free']),
+  paymentId: z.string().max(100).optional().nullable(),
+  orderNsu: z.string().max(100).optional().nullable(),
+  totalAmount: z.number().min(0).max(999999, { message: "Valor total inválido" }),
+  discountAmount: z.number().min(0).max(999999).optional().nullable(),
+  couponCode: z.string().max(50).optional().nullable(),
   userId: z.string().uuid().optional().nullable(),
 });
 

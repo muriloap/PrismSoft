@@ -197,11 +197,26 @@ const CheckoutPage = () => {
       });
 
       if (orderError) {
+        console.error('Function invoke error:', orderError);
+        
+        // Tentar extrair a mensagem de erro do corpo da resposta se for um erro HTTP
+        try {
+          if (orderError instanceof Error && 'details' in orderError) {
+            const details = (orderError as any).details;
+            if (details && typeof details === 'object' && 'error' in details) {
+              throw new Error(details.error);
+            }
+          }
+        } catch (e) {
+          // fallback se falhar em parsear
+        }
+        
         throw new Error(orderError.message || 'Erro ao criar pedido');
       }
 
-      if (!orderData.success) {
-        if (orderData.stockError) {
+      if (!orderData || !orderData.success) {
+        const msg = orderData?.error || 'Erro desconhecido ao criar pedido';
+        if (orderData?.stockError) {
           toast({
             title: "Estoque insuficiente",
             description: orderData.error,
