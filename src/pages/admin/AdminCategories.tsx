@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, Tag, Loader2, GripVertical } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Tag, Loader2, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useCategories, Category } from "@/hooks/useCategories";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PRODUCT_CATEGORIES } from "@/constants/categories";
 import {
   Dialog,
   DialogContent,
@@ -54,6 +55,7 @@ const AdminCategories = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [formData, setFormData] = useState(emptyCategory);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -128,6 +130,36 @@ const AdminCategories = () => {
     }
   };
 
+  const handleSeedDefaults = async () => {
+    setIsSeeding(true);
+    try {
+      for (let i = 0; i < PRODUCT_CATEGORIES.length; i++) {
+        const name = PRODUCT_CATEGORIES[i];
+        const slug = name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+        
+        // Check if category already exists
+        const exists = categories.find(c => c.name === name || c.slug === slug);
+        if (!exists) {
+          await createCategory({
+            name,
+            slug,
+            description: `Produtos da categoria ${name}`,
+            icon: "Tag",
+            sort_order: i,
+            is_active: true
+          });
+        }
+      }
+      toast.success("Categorias padrão restauradas!");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error("Erro ao restaurar categorias");
+      console.error(err);
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   const getProductCount = (categoryName: string) => {
     return products.filter(p => p.category === categoryName).length;
   };
@@ -160,10 +192,21 @@ const AdminCategories = () => {
               <p className="text-sm text-muted-foreground">Gerenciar categorias da Store</p>
             </div>
           </div>
-          <Button variant="hero" onClick={handleOpenCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Nova Categoria
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleSeedDefaults} 
+              disabled={isSeeding}
+              className="gap-2 rounded-xl"
+            >
+              {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Restaurar Padrão
+            </Button>
+            <Button variant="hero" onClick={handleOpenCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Categoria
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -174,16 +217,23 @@ const AdminCategories = () => {
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
           </div>
         ) : categories.length === 0 ? (
-          <div className="text-center py-12 border-2 border-dashed border-border rounded-3xl">
-            <Tag className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+          <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl bg-card/50 backdrop-blur-sm">
+            <Tag className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-20" />
             <h3 className="text-xl font-semibold mb-2">Nenhuma categoria cadastrada</h3>
-            <p className="text-muted-foreground mb-6 max-w-sm mx-auto">
-              As categorias ajudam a organizar seus produtos na loja.
+            <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
+              As categorias são fundamentais para organizar seus produtos. 
+              Você pode criar novas ou restaurar as categorias padrão do Prism System.
             </p>
-            <Button variant="hero" onClick={handleOpenCreate} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova Categoria
-            </Button>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <Button variant="hero" onClick={handleOpenCreate} className="gap-2 px-8">
+                <Plus className="h-4 w-4" />
+                Criar Manualmente
+              </Button>
+              <Button variant="outline" onClick={handleSeedDefaults} disabled={isSeeding} className="gap-2 px-8 rounded-2xl border-purple-500/30 hover:bg-purple-500/10">
+                {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                Restaurar Categorias Padrão
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4">
