@@ -90,7 +90,7 @@ Deno.serve(async (req: Request) => {
           validationErrors: fieldErrors,
           received: rawBody
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -120,8 +120,12 @@ Deno.serve(async (req: Request) => {
     if (!products || products.length === 0) {
       console.error('No products found in DB for IDs:', productIds);
       return new Response(
-        JSON.stringify({ success: false, error: 'Nenhum dos produtos solicitados foi encontrado no catálogo.' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          success: false, 
+          error: 'Nenhum dos produtos solicitados foi encontrado no catálogo.',
+          productIdsSearched: productIds 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -313,9 +317,11 @@ Deno.serve(async (req: Request) => {
           success: false, 
           error: `Erro de validação de preço. Servidor espera ${calculatedTotal.toFixed(2)}, mas o cliente enviou ${body.totalAmount.toFixed(2)}.`,
           expectedTotal: calculatedTotal,
-          receivedTotal: body.totalAmount
+          receivedTotal: body.totalAmount,
+          subtotal: calculatedSubtotal,
+          discount: calculatedDiscount
         }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -351,7 +357,7 @@ Deno.serve(async (req: Request) => {
             available: availableCount,
             requested: item.quantity
           }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
     }

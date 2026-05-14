@@ -212,45 +212,46 @@ const CheckoutPage = () => {
       console.log('Resposta da função recebida:', { orderData, orderError });
 
       if (orderError) {
-        console.error('--- ERRO RETORNADO PELA FUNÇÃO ---');
+        console.error('--- ERRO RETORNADO PELA FUNÇÃO (CATCH) ---');
         console.error('Status/Nome:', orderError.name);
         console.error('Mensagem:', orderError.message);
         
-        // Em muitos casos o corpo da resposta 400 está em context ou details
+        // Em muitos casos o corpo da resposta HTTP está em context ou details
         const details = (orderError as any).details || (orderError as any).context;
         if (details) {
-          console.error('Detalhes do erro (BRUTO):', details);
-          
-          if (typeof details === 'object') {
-            if (details.validationErrors) {
-              console.error('ERROS DE VALIDAÇÃO ZOD:', details.validationErrors);
-              const fields = Object.keys(details.validationErrors).join(', ');
-              throw new Error(`Campos inválidos: ${fields}. Verifique o console.`);
-            }
-            if (details.error) {
-              throw new Error(details.error);
-            }
+          console.error('Detalhes Brutos:', details);
+          if (typeof details === 'object' && details.error) {
+            throw new Error(details.error);
           }
         }
         
         throw new Error(orderError.message || 'Erro ao criar pedido');
       }
 
-      if (!orderData || !orderData.success) {
-        console.error('Resposta de insucesso da função:', orderData);
-        const msg = orderData?.error || 'Erro desconhecido ao criar pedido';
+      if (!orderData || orderData.success === false) {
+        console.error('--- RESPOSTA DE INSUCESSO (SUCCESS: FALSE) ---', orderData);
+        
+        const msg = orderData?.error || 'Erro desconhecido ao processar pedido';
+        
+        if (orderData?.validationErrors) {
+          console.error('Erros de validação ZOD:', orderData.validationErrors);
+          const fields = Object.keys(orderData.validationErrors).join(', ');
+          throw new Error(`Dados inválidos nos campos: ${fields}`);
+        }
+
         if (orderData?.stockError) {
           toast({
             title: "Estoque insuficiente",
-            description: orderData.error,
-            variant: "destructive"
+            description: msg,
+            variant: "destructive",
           });
           return;
         }
-        throw new Error(orderData.error || 'Erro ao criar pedido');
+        
+        throw new Error(msg);
       }
 
-      console.log('Order created:', orderData.order);
+      console.log('PEDIDO CRIADO COM SUCESSO!', orderData.order);
 
       // Check if order is free (100% discount)
       const isFreeOrder = total < 1;
