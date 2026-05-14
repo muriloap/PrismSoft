@@ -60,6 +60,18 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    // Get user from auth header if present
+    const authHeader = req.headers.get('Authorization');
+    let authedUserId: string | null = null;
+    if (authHeader) {
+      try {
+        const { data: { user: authedUser } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+        authedUserId = authedUser?.id || null;
+      } catch (e) {
+        console.warn('Could not verify auth token:', e);
+      }
+    }
+
     // =======================================================
     // INPUT VALIDATION WITH ZOD
     // =======================================================
@@ -96,6 +108,15 @@ Deno.serve(async (req: Request) => {
 
     const body = parseResult.data;
     console.log('Validated request for:', body.email);
+
+    // Identity safety: If userId is provided, it MUST match the authed user (if authed)
+    if (body.userId && authedUserId && body.userId !== authedUserId) {
+      console.error('User ID mismatch! Body:', body.userId, 'Auth:', authedUserId);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Inconsistência de identidade do usuário.' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // =======================================================
     // SERVER-SIDE PRICE VALIDATION
@@ -212,7 +233,7 @@ Deno.serve(async (req: Request) => {
         console.error('Invalid coupon:', body.couponCode);
         return new Response(
           JSON.stringify({ success: false, error: 'Cupom inválido ou expirado' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -223,7 +244,7 @@ Deno.serve(async (req: Request) => {
         if (!body.userId) {
           return new Response(
             JSON.stringify({ success: false, error: 'Faça login para usar este cupom' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
@@ -245,7 +266,7 @@ Deno.serve(async (req: Request) => {
               success: false, 
               error: `Este cupom é exclusivo para ${roleNames[coupon.restricted_to_role] || coupon.restricted_to_role}` 
             }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
       }
@@ -254,14 +275,14 @@ Deno.serve(async (req: Request) => {
       if (coupon.valid_from && new Date(coupon.valid_from) > now) {
         return new Response(
           JSON.stringify({ success: false, error: 'Cupom ainda não está válido' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
       if (coupon.valid_until && new Date(coupon.valid_until) < now) {
         return new Response(
           JSON.stringify({ success: false, error: 'Cupom expirado' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -269,7 +290,7 @@ Deno.serve(async (req: Request) => {
       if (coupon.max_uses && (coupon.current_uses || 0) >= coupon.max_uses) {
         return new Response(
           JSON.stringify({ success: false, error: 'Limite de uso do cupom atingido' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -280,7 +301,7 @@ Deno.serve(async (req: Request) => {
             success: false, 
             error: `Compra mínima de R$ ${coupon.min_purchase.toFixed(2)} necessária` 
           }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 

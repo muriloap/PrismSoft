@@ -194,55 +194,40 @@ const CheckoutPage = () => {
         userId: user?.id || null,
       };
 
-      console.log('--- CHAMANDO API LOCAL (create-order) ---');
+      console.log('--- CHAMANDO SUPABASE EDGE FUNCTION (create-order) ---');
       console.log('Payload:', orderPayload);
 
-      let orderData;
+      let orderData, orderError;
       try {
-        const apiUrl = `${window.location.origin}/api/create-order`;
-        console.log('Fetching from:', apiUrl);
-        
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(orderPayload),
+        const result = await supabase.functions.invoke('create-order', {
+          body: orderPayload
         });
-
-        console.log('Response Status:', response.status);
-        
-        if (!response.ok) {
-          const contentType = response.headers.get("content-type");
-          if (contentType && contentType.includes("application/json")) {
-            orderData = await response.json();
-            console.error('--- ERRO RETORNADO PELA API LOCAL ---', orderData);
-            if (orderData.validationErrors) {
-              const fields = Object.keys(orderData.validationErrors).join(', ');
-              throw new Error(`Dados inválidos nos campos: ${fields}`);
-            }
-            throw new Error(orderData.error || 'Erro ao processar pedido no servidor local');
-          } else {
-            const textError = await response.text();
-            console.error('Resposta não-JSON recebida:', textError);
-            throw new Error(`Erro do servidor (${response.status}): Resposta inesperada`);
-          }
-        }
-
-        orderData = await response.json();
-        console.log('Sucesso! Resposta da API:', orderData);
-
+        orderData = result.data;
+        orderError = result.error;
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('Falha crítica na comunicação:', err);
-        throw new Error(`Erro de conexão: ${errorMessage}. Verifique se o servidor está online.`);
+        console.error('Falha técnica na comunicação:', err);
+        throw new Error(`Erro de conexão com o servidor de pedidos: ${errorMessage}`);
       }
 
-      if (!orderData || !orderData.success) {
-        // This handles cases where response is 200 but success is false if we used that pattern
-        // (but my Express server returns 400/500 for errors)
-        const msg = orderData.error || 'Erro ao processar pedido';
-        if (orderData.stockError) {
+      console.log('Resposta da função recebida:', { orderData, orderError });
+
+      if (orderError) {
+        console.error('--- ERRO RETORNADO PELA FUNÇÃO (SYSTEM ERROR) ---', orderError);
+        throw new Error(orderError.message || 'Erro técnico ao processar pedido');
+      }
+
+      if (!orderData || orderData.success === false) {
+        console.error('--- RESPOSTA DE INSUCESSO (LOGIC ERROR) ---', orderData);
+        
+        const msg = orderData?.error || 'Erro desconhecido ao processar pedido';
+        
+        if (orderData?.validationErrors) {
+          const fields = Object.keys(orderData.validationErrors).join(', ');
+          throw new Error(`Dados inválidos nos campos: ${fields}`);
+        }
+
+        if (orderData?.stockError) {
           toast({
             title: "Estoque insuficiente",
             description: msg,
@@ -250,6 +235,7 @@ const CheckoutPage = () => {
           });
           return;
         }
+        
         throw new Error(msg);
       }
 
