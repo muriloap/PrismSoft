@@ -3,51 +3,60 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
 
-Deno.serve(async (req: Request) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    const apiKey = Deno.env.get('BLACKCAT_API_KEY');
+    const apiKey = Deno.env.get('BLACKCAT_API_KEY')?.trim();
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ success: false, error: 'Gateway não configurado' }),
+      return new Response(JSON.stringify({ success: false, error: 'Gateway não configurado (API Key)' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
-    const { chargeId, orderId } = await req.json();
-
-    if (!chargeId) {
-      return new Response(JSON.stringify({ success: false, error: 'ID da transação ausente' }),
+    
+    let body;
+    try {
+      body = await req.json();
+    } catch(e) {
+      return new Response(JSON.stringify({ success: false, error: 'JSON inválido' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Verificando pagamento ${chargeId}...`);
+    const { chargeId, orderId } = body;
+
+    if (!chargeId) {
+      return new Response(JSON.stringify({ success: false, error: 'ID da transação não informado' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    console.log(`Verificando status do pagamento ${chargeId} para pedido ${orderId}`);
+    
     const resp = await fetch(`${BLACKCAT_API_URL}/sales/get-sale/${chargeId}`, {
       method: 'GET',
       headers: {
         'X-API-Key': apiKey,
-        'Authorization': `Bearer ${apiKey}`,
       },
     });
 
     const data = await resp.json();
 
     if (!resp.ok || !data.success) {
-      return new Response(JSON.stringify({ success: false, error: data.message || 'Erro ao consultar' }),
+      return new Response(JSON.stringify({ success: false, error: data.message || 'Erro ao consultar gateway' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const status = data.data?.status;
+    const status = (data.data?.status || '').toLowerCase();
     const isPaid = status === 'paid' || status === 'confirmed';
     const isExpired = status === 'expired' || status === 'canceled';
 
@@ -60,12 +69,18 @@ Deno.serve(async (req: Request) => {
 
     return new Response(JSON.stringify({
       success: true,
-      payment: { status, isPaid, isExpired },
+      payment: { 
+        status, 
+        isPaid, 
+        isExpired,
+        amount: data.data?.amount,
+        customerEmail: data.data?.customer?.email
+      },
     }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (e: any) {
-    console.error('blackcat-verify-payment error:', e);
-    return new Response(JSON.stringify({ success: false, error: 'Erro interno', details: e.message }),
+    console.error('ERRO EM verify-payment:', e);
+    return new Response(JSON.stringify({ success: false, error: 'Erro de processamento interno', details: e.message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
