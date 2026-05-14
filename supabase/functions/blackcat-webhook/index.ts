@@ -41,7 +41,18 @@ async function deliverKeysForOrder(supabase: any, orderId: string) {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: corsHeaders });
+  // Robust CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { 
+      status: 204, 
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-source',
+        'Access-Control-Max-Age': '86400',
+      } 
+    });
+  }
 
   try {
     const source = req.headers.get('x-webhook-source');

@@ -33,10 +33,16 @@ const CreateOrderSchema = z.object({
 });
 
 Deno.serve(async (req) => {
+  // Ultra-robust CORS handling for preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      status: 200, 
-      headers: corsHeaders 
+    return new Response(null, { 
+      status: 204, 
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Max-Age': '86400',
+      } 
     });
   }
 
@@ -50,6 +56,7 @@ Deno.serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     const body = await req.json();
+    console.log('Order request body:', JSON.stringify(body));
 
     const parseResult = CreateOrderSchema.safeParse(body);
     if (!parseResult.success) {
@@ -190,12 +197,15 @@ Deno.serve(async (req) => {
                            pd.pix_code ||
                            pd.brcode ||
                            pd.pix_payload ||
+                           pd.pixData?.copyPaste ||
+                           pd.data?.copyPaste ||
                            tx.copyPaste || 
                            tx.pix_code || 
                            tx.payload ||
                            tx.pix_payload ||
                            tx.pixCode ||
                            tx.pix_code_brcode ||
+                           tx.brcode ||
                            '';
             
             // Extract QR Code (Base64)
@@ -207,9 +217,12 @@ Deno.serve(async (req) => {
                             pd.qr_code ||
                             pd.qrcode ||
                             pd.image ||
+                            pd.qr_image ||
                             tx.qr_code_base64 ||
                             tx.qrcode ||
                             tx.qrCodeImage ||
+                            tx.image_base64 ||
+                            tx.qr_image_base64 ||
                             '';
             
             // Extract expiration

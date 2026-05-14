@@ -10,11 +10,16 @@ const corsHeaders = {
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
 
 Deno.serve(async (req) => {
-  // CORS Preflight
+  // Robust CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      status: 200, 
-      headers: corsHeaders 
+    return new Response(null, { 
+      status: 204, 
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+        'Access-Control-Max-Age': '86400',
+      } 
     });
   }
 
