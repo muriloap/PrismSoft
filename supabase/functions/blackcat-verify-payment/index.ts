@@ -2,8 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
@@ -33,14 +33,14 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { chargeId, orderId } = body;
+    const { chargeId, orderId, orderNsu } = body;
 
     if (!chargeId) {
       return new Response(JSON.stringify({ success: false, error: 'ID da transação não informado' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    console.log(`Verificando status do pagamento ${chargeId} para pedido ${orderId}`);
+    console.log(`Verificando status do pagamento ${chargeId} para pedido ${orderId} (NSU: ${orderNsu})`);
     
     const resp = await fetch(`${BLACKCAT_API_URL}/sales/get-sale/${chargeId}`, {
       method: 'GET',
@@ -61,10 +61,28 @@ Deno.serve(async (req) => {
     const isExpired = status === 'expired' || status === 'canceled';
 
     if (isPaid && orderId) {
+      // 1. Atualiza status para pago
       await supabase.from('orders').update({ 
         status: 'paid',
         paid_at: new Date().toISOString()
       }).eq('id', orderId);
+
+      // 2. Tenta entregar chaves se NSU disponível
+      if (orderNsu) {
+        try {
+          console.log(`Chamando entrega automática para pedido ${orderId}...`);
+          await fetch(`${supabaseUrl}/functions/v1/auto-deliver-keys`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseServiceKey}`,
+            },
+            body: JSON.stringify({ orderId, orderNsu }),
+          });
+        } catch (deliveryErr) {
+          console.error("Erro ao solicitar entrega automática:", deliveryErr);
+        }
+      }
     }
 
     return new Response(JSON.stringify({

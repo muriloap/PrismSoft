@@ -3,8 +3,8 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
 };
 
 const CartItemSchema = z.object({
@@ -169,10 +169,17 @@ Deno.serve(async (req) => {
           const bcData = await bcResp.json();
           if (bcData.success && bcData.data) {
             const tx = bcData.data;
+            
+            // Backup QR code generator if base64 is missing
+            const qrBase64 = tx.paymentData?.qrCodeBase64;
+            const pixCode = tx.paymentData?.copyPaste || tx.paymentData?.qrCode || '';
+            
             payment = {
               id: tx.transactionId,
-              pixCode: tx.paymentData?.copyPaste || '',
-              qrCodeImage: tx.paymentData?.qrCodeBase64 ? `data:image/png;base64,${tx.paymentData.qrCodeBase64}` : '',
+              pixCode: pixCode,
+              qrCodeImage: qrBase64 
+                ? `data:image/png;base64,${qrBase64}` 
+                : `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}`,
               publicPaymentUrl: tx.invoiceUrl,
             };
             // Atualiza o payment_id no pedido

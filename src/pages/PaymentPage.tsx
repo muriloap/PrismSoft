@@ -83,6 +83,7 @@ const PaymentPage = () => {
           body: { 
             chargeId: paymentData.id,
             orderId: paymentData.orderId,
+            orderNsu: paymentData.orderNsu,
           }
         });
 
@@ -157,6 +158,7 @@ const PaymentPage = () => {
         body: { 
           chargeId: paymentData.id,
           orderId: paymentData.orderId,
+          orderNsu: paymentData.orderNsu,
         }
       });
 
@@ -401,12 +403,24 @@ const PaymentPage = () => {
                 {/* QR Code Container with glow */}
                 <div className="relative mb-8 group">
                   <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
-                  <div className="relative bg-white p-5 rounded-2xl shadow-xl">
-                    <img 
-                      src={paymentData.qrCodeImage} 
-                      alt="QR Code PIX" 
-                      className="w-52 h-52"
-                    />
+                  <div className="relative bg-white p-5 rounded-2xl shadow-xl flex items-center justify-center min-w-[200px] min-h-[200px]">
+                    {paymentData.qrCodeImage ? (
+                      <img 
+                        src={paymentData.qrCodeImage} 
+                        alt="QR Code PIX" 
+                        className="w-52 h-52 transition-opacity duration-300"
+                        onLoad={(e) => (e.currentTarget.style.opacity = '1')}
+                        onError={(e) => {
+                          console.error("QR Code image fail, using fallback generator");
+                          e.currentTarget.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="w-52 h-52 flex flex-col items-center justify-center text-muted-foreground gap-2">
+                        <RefreshCw className="h-8 w-8 animate-spin" />
+                        <span className="text-xs">Gerando QR Code...</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
