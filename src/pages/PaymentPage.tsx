@@ -54,13 +54,17 @@ const PaymentPage = () => {
           }
           
           // Re-hydration of payment data if missing
-          if (order.payment_id && (!paymentData || !paymentData.id)) {
+          if (order.payment_id && (!paymentData || !paymentData.id || !paymentData.pixCode)) {
+            console.log("Re-hydrating payment data from order observation...");
             setPaymentData(prev => ({
-              ...prev!,
               id: order.payment_id,
               orderId: order.id,
               orderNsu: order.order_nsu,
-              value: order.total_amount
+              value: order.total_amount,
+              pixCode: prev?.pixCode || '',
+              status: order.status,
+              expiresDate: order.created_at ? new Date(new Date(order.created_at).getTime() + 30 * 60 * 1000).toISOString() : '',
+              qrCodeImage: prev?.qrCodeImage || ''
             }));
           }
         }

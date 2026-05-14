@@ -176,7 +176,7 @@ const CheckoutPage = () => {
       }
 
       if (paymentMethod === 'pix') {
-        if (orderData.payment) {
+        if (orderData.payment && (orderData.payment.pixCode || orderData.payment.publicPaymentUrl)) {
           localStorage.setItem('current-payment', JSON.stringify({ 
             ...orderData.payment, 
             orderId: orderData.order.id, 
@@ -186,7 +186,8 @@ const CheckoutPage = () => {
           clearCart();
           navigate(`/pagamento?order_nsu=${encodeURIComponent(orderNsu)}`);
         } else {
-          throw new Error('Não foi possível gerar o código PIX. O pedido foi criado, tente pagar novamente mais tarde.');
+          console.error("PIX missing in success response:", orderData);
+          throw new Error('O pedido foi criado, mas o gateway não retornou os dados de pagamento. Tente pagar novamente em instantes ou contate o suporte.');
         }
       } else {
         // InfinitePay

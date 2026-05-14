@@ -34,7 +34,10 @@ const CreateOrderSchema = z.object({
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return new Response('ok', { 
+      status: 200, 
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -176,7 +179,7 @@ Deno.serve(async (req) => {
             // Comprehensive mapping
             const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
             
-            // Extract PIX code (Copia e Cola)
+            // Extract PIX code (Copia e Cola) - Ultra Defensive Mapping
             const pixCode = pd.copyPaste || 
                            pd.qrCode || 
                            pd.pixCode || 
@@ -185,9 +188,14 @@ Deno.serve(async (req) => {
                            pd.copia_e_cola || 
                            pd.code || 
                            pd.pix_code ||
+                           pd.brcode ||
+                           pd.pix_payload ||
                            tx.copyPaste || 
                            tx.pix_code || 
                            tx.payload ||
+                           tx.pix_payload ||
+                           tx.pixCode ||
+                           tx.pix_code_brcode ||
                            '';
             
             // Extract QR Code (Base64)
@@ -197,8 +205,11 @@ Deno.serve(async (req) => {
                             pd.qrCodeContent || 
                             pd.base64 || 
                             pd.qr_code ||
+                            pd.qrcode ||
+                            pd.image ||
                             tx.qr_code_base64 ||
                             tx.qrcode ||
+                            tx.qrCodeImage ||
                             '';
             
             // Extract expiration
@@ -207,15 +218,18 @@ Deno.serve(async (req) => {
                              pd.expirationDate || 
                              pd.valid_until ||
                              pd.expires_in ||
+                             pd.expired_at ||
                              tx.expires_at ||
+                             tx.expirationDate ||
+                             tx.valid_until ||
                              new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
             
-            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id || tx.external_id;
+            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id || tx.external_id || tx.order_id || tx.payment_id;
             
-            if (pixCode) {
+            if (pixCode || tx.invoiceUrl || tx.payment_url || tx.checkout_url) {
               payment = {
                 id: transactionId ? String(transactionId) : `PIX-${Date.now()}`,
-                pixCode: pixCode,
+                pixCode: pixCode || '',
                 qrCodeImage: qrBase64 
                   ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
                   : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
@@ -228,8 +242,8 @@ Deno.serve(async (req) => {
                 await supabase.from('orders').update({ payment_id: String(transactionId) }).eq('id', order.id);
               }
             } else {
-              console.error('PIX Code missing in BlackCat response:', JSON.stringify(bcData));
-              throw new Error('O gateway não retornou o código PIX. Tente novamente.');
+              console.error('PIX data missing in BlackCat response. Response body:', JSON.stringify(bcData));
+              throw new Error('O gateway não retornou os dados de pagamento. Verifique sua configuração ou tente novamente.');
             }
           } else {
             console.error('BlackCat API ERROR:', JSON.stringify(bcData));

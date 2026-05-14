@@ -30,12 +30,7 @@ const Header = () => {
           .select("avatar_url")
           .eq("id", user.id);
         
-        if (error) {
-          // If it's a "no rows" error or similar, we ignore it
-          return;
-        }
-
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           setAvatarUrl(data[0].avatar_url);
         }
       } catch (err) {
