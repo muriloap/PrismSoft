@@ -63,18 +63,18 @@ if (keyIsInvalid) {
 }
 
 // Use a safe fallback URL if missing to prevent initialization crash
-const safeUrl = (SUPABASE_URL && SUPABASE_URL.startsWith('http')) ? SUPABASE_URL : "https://placeholder-project.supabase.co";
-const safeKey = SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
+const safeUrl = (SUPABASE_URL && SUPABASE_URL.startsWith('http')) ? SUPABASE_URL : "https://tjqxxnytrifiskebtzsx.supabase.co"; // Usando o ID que vimos nos seus logs
+const safeKey = SUPABASE_PUBLISHABLE_KEY || "";
 
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  console.warn("ENVIRONMENT ERROR: Supabase credentials are missing in project settings.");
+  console.error("ERRO DE CONFIGURAÇÃO: As chaves do Supabase não foram encontradas nas configurações do projeto.");
+  console.warn("Por favor, vá no menu 'Settings' (ícone de engrenagem) e adicione as variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY com os valores do seu painel do Supabase.");
 }
 
 export const isSupabaseConfigured = Boolean(
   SUPABASE_URL && 
   SUPABASE_URL.startsWith('http') && 
-  SUPABASE_PUBLISHABLE_KEY &&
-  SUPABASE_PUBLISHABLE_KEY !== "placeholder-key"
+  SUPABASE_PUBLISHABLE_KEY
 );
 
 export const supabase = createClient<Database>(safeUrl, safeKey, {
