@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Copy, Check, Clock, RefreshCw, ArrowLeft, CheckCircle, XCircle, Smartphone, QrCode, Sparkles, ShieldCheck, PartyPopper, Gift } from 'lucide-react';
+import { Copy, Check, Clock, RefreshCw, ArrowLeft, CheckCircle, XCircle, Smartphone, QrCode, Sparkles, ShieldCheck, PartyPopper, Gift, ExternalLink } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -140,37 +141,41 @@ const PaymentPage = () => {
     if (!code) {
       toast({
         title: "Código não disponível",
-        description: "Aguarde o carregamento do código PIX.",
+        description: "O PIX ainda está sendo gerado. Aguarde um momento.",
         variant: "destructive"
       });
       return;
     }
     
     try {
-      // Fallback for copying if navigator.clipboard fails
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      // Modern clipboard API
+      if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(code);
       } else {
-        // Legacy fallback
-        const textArea = document.createElement("textarea");
-        textArea.value = code;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
+        // Superior fallback
+        const input = document.createElement('input');
+        input.value = code;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.focus();
+        input.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(input);
+        if (!success) throw new Error('ExecCommand copy failed');
       }
       
       setCopied(true);
       toast({
-        title: "Código copiado!",
-        description: "Cole no seu aplicativo de pagamento.",
+        title: "Sucesso!",
+        description: "Código PIX copiado. Agora cole no seu banco.",
       });
       setTimeout(() => setCopied(false), 3000);
     } catch (err) {
       console.error("Erro ao copiar:", err);
       toast({
         title: "Erro ao copiar",
-        description: "Tente copiar o link de pagamento ou atualize a página.",
+        description: "Não foi possível copiar automaticamente. Selecione o código manualmente.",
         variant: "destructive"
       });
     }
@@ -431,34 +436,34 @@ const PaymentPage = () => {
                 <div className="relative mb-8 group">
                   <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-fuchsia-600 rounded-2xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
                   <div className="relative bg-white p-5 rounded-2xl shadow-xl flex items-center justify-center min-w-[200px] min-h-[200px]">
-                    {(paymentData.qrCodeImage || paymentData.pixCode) ? (
-                      <img 
-                        src={paymentData.qrCodeImage || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`} 
-                        alt="QR Code PIX" 
-                        className="w-52 h-52 transition-all duration-300"
-                        onLoad={(e) => {
-                          e.currentTarget.classList.add('opacity-100');
-                        }}
-                        onError={(e) => {
-                          console.error("QR image fail, applying fallback");
-                          const fallback = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(paymentData.pixCode)}`;
-                          if (e.currentTarget.src !== fallback) {
-                            e.currentTarget.src = fallback;
-                          }
-                        }}
-                      />
+                    {paymentData.pixCode ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <QRCodeSVG 
+                          value={paymentData.pixCode}
+                          size={200}
+                          level="H"
+                          includeMargin={true}
+                          imageSettings={paymentData.qrCodeImage ? {
+                            src: paymentData.qrCodeImage,
+                            height: 40,
+                            width: 40,
+                            excavate: true,
+                          } : undefined}
+                        />
+                      </div>
                     ) : (
                       <div className="w-52 h-52 flex flex-col items-center justify-center text-muted-foreground gap-3">
                         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                        <span className="text-xs font-medium">Buscando PIX...</span>
+                        <span className="text-xs font-medium">Gerando PIX...</span>
                         {paymentData.publicPaymentUrl && (
                           <Button 
-                            variant="link" 
+                            variant="secondary" 
                             size="sm" 
-                            className="text-[10px] h-auto p-0 text-purple-400"
+                            className="text-xs gap-2"
                             onClick={() => window.open(paymentData.publicPaymentUrl, '_blank')}
                           >
-                            Abrir página de pagamento
+                            <ExternalLink className="h-3 w-3" />
+                            Página de Pagamento
                           </Button>
                         )}
                       </div>

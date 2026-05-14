@@ -25,11 +25,11 @@ const Header = () => {
       }
 
       try {
-        // Use standard select without maybeSingle to avoid 404/406 console logs
         const { data, error } = await supabase
           .from("profiles")
           .select("avatar_url")
-          .eq("id", user.id);
+          .eq("id", user.id)
+          .limit(1);
         
         if (!error && data && data.length > 0) {
           setAvatarUrl(data[0].avatar_url);

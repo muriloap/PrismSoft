@@ -5,6 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 const CartItemSchema = z.object({
@@ -167,26 +168,61 @@ Deno.serve(async (req) => {
           });
 
           const bcData = await bcResp.json();
+          console.log('BlackCat Create Response:', JSON.stringify(bcData));
+
           if (bcData.success && bcData.data) {
             const tx = bcData.data;
             
-            // Backup QR code generator if base64 is missing
+            // Comprehensive field mapping for PIX and payment data
+            // BlackCat sometimes nests pix info or uses direct fields
             const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
-            const qrBase64 = pd.qrCodeBase64 || pd.qrcode_base64 || pd.qrContent || pd.qrCodeContent;
-            const pixCode = pd.copyPaste || pd.qrCode || pd.pixCode || pd.payload || pd.emv || pd.copia_e_cola || pd.code || tx.copyPaste || '';
-            const expiresAt = pd.expiresAt || pd.expires_at || pd.expirationDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            
+            // Extract PIX code (Copia e Cola)
+            const pixCode = pd.copyPaste || 
+                           pd.qrCode || 
+                           pd.pixCode || 
+                           pd.payload || 
+                           pd.emv || 
+                           pd.copia_e_cola || 
+                           pd.code || 
+                           tx.copyPaste || 
+                           tx.pix_code || 
+                           '';
+            
+            // Extract QR Code (Base64)
+            const qrBase64 = pd.qrCodeBase64 || 
+                            pd.qrcode_base64 || 
+                            pd.qrContent || 
+                            pd.qrCodeContent || 
+                            pd.base64 || 
+                            tx.qr_code_base64 ||
+                            '';
+            
+            // Extract expiration
+            const expiresAt = pd.expiresAt || 
+                             pd.expires_at || 
+                             pd.expirationDate || 
+                             pd.valid_until ||
+                             new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+            
+            const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid;
             
             payment = {
-              id: tx.transactionId || tx.id || tx.txid,
+              id: transactionId,
               pixCode: pixCode,
               qrCodeImage: qrBase64 
                 ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
                 : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
               expiresDate: expiresAt,
-              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url,
+              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url,
             };
+            
             // Atualiza o payment_id no pedido
-            await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', order.id);
+            if (transactionId) {
+              await supabase.from('orders').update({ payment_id: transactionId }).eq('id', order.id);
+            }
+          } else {
+            console.error('BlackCat API reported failure or missing data:', bcData);
           }
         }
       } catch (bcError) {
