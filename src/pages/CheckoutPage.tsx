@@ -206,12 +206,14 @@ const CheckoutPage = () => {
         // Tentar extrair detalhes de validação se houver
         if (orderError instanceof Error && 'details' in orderError) {
           const details = (orderError as any).details;
+          console.error('SERVER ERROR DETAILS:', details);
+          
           if (details && typeof details === 'object') {
              if ('validationErrors' in details) {
-               console.error('ERRO DE VALIDAÇÃO DO PEDIDO:', details.validationErrors);
+               console.error('ERRO DE VALIDAÇÃO DO PEDIDO (ZOD):', details.validationErrors);
                // Criar uma mensagem amigável dos erros de campo
                const fields = Object.keys(details.validationErrors).join(', ');
-               throw new Error(`Campos inválidos: ${fields}. Verifique o console para detalhes.`);
+               throw new Error(`Campos inválidos no pedido: ${fields}. Verifique o console.`);
              }
              if ('error' in details) {
                throw new Error(details.error);

@@ -11,7 +11,7 @@ const corsHeaders = {
 // =======================================================
 
 const CartItemSchema = z.object({
-  productId: z.string().uuid({ message: "ID do produto inválido" }),
+  productId: z.string().min(1).max(100, { message: "ID do produto inválido" }),
   productName: z.string().min(1).max(200, { message: "Nome do produto muito longo" }),
   productImage: z.string().max(2000).optional().nullable(),
   variationId: z.string().min(1).max(100, { message: "ID da variação inválido" }),
