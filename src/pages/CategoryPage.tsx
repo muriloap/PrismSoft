@@ -91,7 +91,7 @@ const CategoryPage = () => {
                     key={product.id}
                     className="group bg-card/40 backdrop-blur-xl border border-border/50 rounded-3xl overflow-hidden hover:border-purple-500/50 transition-all hover:shadow-2xl hover:shadow-purple-500/10 flex flex-col"
                   >
-                    <Link to={`/product/${product.slug}`} className="relative h-56 overflow-hidden">
+                    <Link to={`/produto/${product.slug}`} className="relative h-56 overflow-hidden">
                       {product.image_url ? (
                         <img 
                           src={product.image_url} 
@@ -112,7 +112,7 @@ const CategoryPage = () => {
 
                     <div className="p-6 flex-1 flex flex-col">
                       <div className="mb-4">
-                        <Link to={`/product/${product.slug}`}>
+                        <Link to={`/produto/${product.slug}`}>
                           <h3 className="text-xl font-bold mb-2 group-hover:text-purple-400 transition-colors uppercase">
                             {product.name}
                           </h3>
@@ -138,7 +138,7 @@ const CategoryPage = () => {
                           asChild
                           className="w-full rounded-xl bg-purple-600 hover:bg-purple-700 font-bold"
                         >
-                          <Link to={`/product/${product.slug}`}>
+                          <Link to={`/produto/${product.slug}`}>
                             <ShoppingCart className="h-4 w-4 mr-2" />
                             Comprar Agora
                           </Link>

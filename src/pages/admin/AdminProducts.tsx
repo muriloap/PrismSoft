@@ -197,10 +197,12 @@ const AdminProducts = () => {
         await updateProduct(selectedProduct.id, productData);
         toast.success("Produto atualizado!");
       } else {
-        await createProduct(productData);
-        toast.success("Produto criado!");
+        const result = await createProduct(productData);
+        toast.success("Produto criado! Redirecionando...");
+        setIsDialogOpen(false);
+        // Small delay to ensure DB sync if needed, though useProducts handles it
+        setTimeout(() => navigate(`/produto/${productData.slug}`), 1000);
       }
-      setIsDialogOpen(false);
     } catch (error: unknown) {
       const err = error as Error;
       toast.error(err.message || "Erro ao salvar produto");
@@ -265,21 +267,6 @@ const AdminProducts = () => {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
           </div>
-        ) : productsError ? (
-          <div className="text-center py-20 bg-red-500/5 rounded-3xl border border-dashed border-red-500/20 max-w-2xl mx-auto">
-            <Package className="h-12 w-12 mx-auto mb-4 text-red-500 opacity-20" />
-            <h3 className="text-xl font-bold text-red-500 mb-2">Erro de Conexão</h3>
-            <p className="text-muted-foreground mb-6">
-              Não foi possível carregar os produtos do banco de dados. 
-              {productsError.includes('products') && " Verifique se a tabela 'products' existe no seu Supabase."}
-            </p>
-            <div className="p-4 bg-muted/50 rounded-xl font-mono text-[10px] text-left overflow-x-auto mb-6">
-              <code>{productsError}</code>
-            </div>
-            <Button onClick={() => window.location.reload()} variant="outline">
-              Tentar Novamente
-            </Button>
-          </div>
         ) : products.length === 0 ? (
           <div className="text-center py-12">
             <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
@@ -333,6 +320,14 @@ const AdminProducts = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    title="Ver no Site"
+                    onClick={() => window.open(`/produto/${product.slug}`, '_blank')}
+                  >
+                    <Package className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="outline"
                     size="icon"
