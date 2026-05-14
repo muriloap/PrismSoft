@@ -181,19 +181,23 @@ const CheckoutPage = () => {
         return;
       }
 
+      const orderPayload = {
+        items: cartItems,
+        email: contactInfo.email,
+        customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || null,
+        phone: contactInfo.phone || null,
+        paymentMethod: paymentMethod,
+        orderNsu: orderNsu,
+        totalAmount: total,
+        discountAmount: discount,
+        couponCode: couponCode || null,
+        userId: user?.id || null,
+      };
+
+      console.log('Sending order payload:', orderPayload);
+
       const { data: orderData, error: orderError } = await supabase.functions.invoke('create-order', {
-        body: {
-          items: cartItems,
-          email: contactInfo.email,
-          customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || undefined,
-          phone: contactInfo.phone || undefined,
-          paymentMethod: paymentMethod,
-          orderNsu: orderNsu,
-          totalAmount: total,
-          discountAmount: discount,
-          couponCode: couponCode || undefined,
-          userId: user?.id || undefined,
-        }
+        body: orderPayload
       });
 
       if (orderError) {

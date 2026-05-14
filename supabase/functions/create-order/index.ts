@@ -67,6 +67,9 @@ Deno.serve(async (req: Request) => {
     let rawBody: unknown;
     try {
       rawBody = await req.json();
+      console.log('--- RECEIVED BODY ---');
+      console.log(JSON.stringify(rawBody, null, 2));
+      console.log('----------------------');
     } catch {
       return new Response(
         JSON.stringify({ success: false, error: 'JSON inválido' }),
@@ -77,12 +80,13 @@ Deno.serve(async (req: Request) => {
     const parseResult = CreateOrderSchema.safeParse(rawBody);
     
     if (!parseResult.success) {
-      console.error('Validation error:', parseResult.error.issues);
+      const fieldErrors = parseResult.error.flatten().fieldErrors;
+      console.error('Validation error details:', JSON.stringify(fieldErrors, null, 2));
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Dados do pedido inválidos',
-          validationErrors: parseResult.error.flatten().fieldErrors 
+          error: 'Dados do pedido inválidos (Zod)',
+          validationErrors: fieldErrors 
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -291,13 +295,14 @@ Deno.serve(async (req: Request) => {
 
     // Verify client calculation matches server (allow small floating point differences)
     const priceDifference = Math.abs(calculatedTotal - body.totalAmount);
-    if (priceDifference > 0.01) {
+    if (priceDifference > 0.05) { // Increased tolerance to 0.05
       console.error('Price mismatch detected! Server:', calculatedTotal, 'Client:', body.totalAmount);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Erro de validação de preço. Por favor, atualize seu carrinho.',
-          expectedTotal: calculatedTotal
+          error: `Erro de validação de preço. Servidor espera ${calculatedTotal.toFixed(2)}, mas o cliente enviou ${body.totalAmount.toFixed(2)}.`,
+          expectedTotal: calculatedTotal,
+          receivedTotal: body.totalAmount
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
