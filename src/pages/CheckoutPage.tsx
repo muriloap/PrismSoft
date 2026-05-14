@@ -46,44 +46,6 @@ const CheckoutPage = () => {
   const [checking, setChecking] = useState(false);
   const [timeLeft, setTimeLeft] = useState<string>('');
 
-  // Timer for PIX expiration
-  useEffect(() => {
-    if (!paymentData || !showPaymentDialog) return;
-
-    const timer = setInterval(() => {
-      const now = new Date().getTime();
-      const expirationDate = new Date(paymentData.expiresDate).getTime();
-      const distance = expirationDate - now;
-
-      if (distance < 0) {
-        clearInterval(timer);
-        setTimeLeft('EXPIRADO');
-        return;
-      }
-
-      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [paymentData, showPaymentDialog]);
-
-  // Check payment status automatically
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-
-    if (showPaymentDialog && paymentData && paymentData.status !== 'paid') {
-      interval = setInterval(() => {
-        checkPaymentStatus();
-      }, 5000); // Check every 5 seconds
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [showPaymentDialog, paymentData, checkPaymentStatus]);
-
   const checkPaymentStatus = useCallback(async () => {
     if (!paymentData || checking) return;
     
@@ -125,6 +87,44 @@ const CheckoutPage = () => {
     });
     setTimeout(() => setCopied(false), 2000);
   };
+
+  // Timer for PIX expiration
+  useEffect(() => {
+    if (!paymentData || !showPaymentDialog) return;
+
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const expirationDate = new Date(paymentData.expiresDate).getTime();
+      const distance = expirationDate - now;
+
+      if (distance < 0) {
+        clearInterval(timer);
+        setTimeLeft('EXPIRADO');
+        return;
+      }
+
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [paymentData, showPaymentDialog]);
+
+  // Check payment status automatically
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (showPaymentDialog && paymentData && paymentData.status !== 'paid') {
+      interval = setInterval(() => {
+        checkPaymentStatus();
+      }, 5000); // Check every 5 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showPaymentDialog, paymentData, checkPaymentStatus]);
   
   const [contactInfo, setContactInfo] = useState({
     firstName: '',
