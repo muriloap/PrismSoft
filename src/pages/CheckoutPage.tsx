@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from "sonner";
 import { supabase } from '@/integrations/supabase/client';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -27,7 +27,6 @@ const CheckoutPage = () => {
   const navigate = useNavigate();
   const { items, removeItem, updateQuantity, subtotal, discount, total, couponCode, appliedCoupon, applyCoupon, removeCoupon, clearCart, isValidatingCoupon } = useCart();
   const { user } = useAuth();
-  const { toast } = useToast();
   
   const [paymentMethod, setPaymentMethod] = useState<'pix' | 'card'>('pix');
   const [couponInput, setCouponInput] = useState('');
@@ -84,44 +83,35 @@ const CheckoutPage = () => {
     
     const result = await applyCoupon(couponInput);
     if (result.success) {
-      toast({
-        title: "Cupom aplicado!",
+      toast.success("Cupom aplicado!", {
         description: "Desconto aplicado ao seu pedido.",
       });
       setCouponInput('');
     } else {
-      toast({
-        title: "Cupom inválido",
+      toast.error("Cupom inválido", {
         description: result.error || "O código inserido não é válido.",
-        variant: "destructive"
       });
     }
   };
 
   const handleCheckout = async () => {
     if (items.length === 0) {
-      toast({
-        title: "Carrinho vazio",
+      toast.error("Carrinho vazio", {
         description: "Adicione produtos ao carrinho antes de finalizar.",
-        variant: "destructive"
       });
       return;
     }
 
     if (!acceptTerms) {
-      toast({
-        title: "Aceite os termos",
+      toast.error("Aceite os termos", {
         description: "Você precisa aceitar os termos e condições.",
-        variant: "destructive"
       });
       return;
     }
 
     if (!contactInfo.email) {
-      toast({
-        title: "Email obrigatório",
+      toast.error("Email obrigatório", {
         description: "Por favor, insira seu email.",
-        variant: "destructive"
       });
       return;
     }
@@ -173,10 +163,8 @@ const CheckoutPage = () => {
 
       const stillInvalid = cartItems.find((i) => !isUuid(i.productId));
       if (stillInvalid) {
-        toast({
-          title: "Produto inválido no carrinho",
+        toast.error("Produto inválido no carrinho", {
           description: "Remova o item do carrinho e adicione novamente.",
-          variant: "destructive",
         });
         return;
       }
@@ -232,10 +220,8 @@ const CheckoutPage = () => {
         }
 
         if (orderData?.stockError) {
-          toast({
-            title: "Estoque insuficiente",
+          toast.error("Estoque insuficiente", {
             description: msg,
-            variant: "destructive",
           });
           return;
         }
@@ -406,10 +392,8 @@ const CheckoutPage = () => {
     } catch (error: unknown) {
       console.error('Checkout error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Erro ao processar pagamento';
-      toast({
-        title: "Erro no pagamento",
+      toast.error("Erro no pagamento", {
         description: errorMessage,
-        variant: "destructive"
       });
     } finally {
       setIsProcessing(false);
