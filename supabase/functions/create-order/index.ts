@@ -13,7 +13,7 @@ const corsHeaders = {
 const CartItemSchema = z.object({
   productId: z.string().uuid({ message: "ID do produto inválido" }),
   productName: z.string().min(1).max(200, { message: "Nome do produto muito longo" }),
-  productImage: z.string().max(500).optional().nullable(),
+  productImage: z.string().max(2000).optional().nullable(),
   variationId: z.string().min(1).max(100, { message: "ID da variação inválido" }),
   variationName: z.string().min(1).max(200, { message: "Nome da variação muito longo" }),
   price: z.number().min(0).max(999999, { message: "Preço inválido" }),
@@ -23,7 +23,7 @@ const CartItemSchema = z.object({
 const CreateOrderSchema = z.object({
   items: z.array(CartItemSchema).min(1, { message: "Carrinho vazio" }).max(50, { message: "Muitos itens no carrinho" }),
   email: z.string().email({ message: "Email inválido" }).max(255),
-  customerName: z.string().min(1).max(200).optional().nullable(),
+  customerName: z.string().max(200).optional().nullable(),
   phone: z.string().max(30).optional().nullable(),
   paymentMethod: z.enum(['pix', 'card', 'free']),
   paymentId: z.string().max(100).optional().nullable(),
@@ -78,9 +78,12 @@ Deno.serve(async (req: Request) => {
     
     if (!parseResult.success) {
       console.error('Validation error:', parseResult.error.issues);
-      const firstError = parseResult.error.issues[0]?.message || 'Dados inválidos';
       return new Response(
-        JSON.stringify({ success: false, error: firstError }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Dados do pedido inválidos',
+          validationErrors: parseResult.error.flatten().fieldErrors 
+        }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

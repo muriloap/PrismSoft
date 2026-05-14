@@ -199,16 +199,20 @@ const CheckoutPage = () => {
       if (orderError) {
         console.error('Function invoke error:', orderError);
         
-        // Tentar extrair a mensagem de erro do corpo da resposta se for um erro HTTP
-        try {
-          if (orderError instanceof Error && 'details' in orderError) {
-            const details = (orderError as any).details;
-            if (details && typeof details === 'object' && 'error' in details) {
-              throw new Error(details.error);
-            }
+        // Tentar extrair detalhes de validação se houver
+        if (orderError instanceof Error && 'details' in orderError) {
+          const details = (orderError as any).details;
+          if (details && typeof details === 'object') {
+             if ('validationErrors' in details) {
+               console.error('ERRO DE VALIDAÇÃO DO PEDIDO:', details.validationErrors);
+               // Criar uma mensagem amigável dos erros de campo
+               const fields = Object.keys(details.validationErrors).join(', ');
+               throw new Error(`Campos inválidos: ${fields}. Verifique o console para detalhes.`);
+             }
+             if ('error' in details) {
+               throw new Error(details.error);
+             }
           }
-        } catch (e) {
-          // fallback se falhar em parsear
         }
         
         throw new Error(orderError.message || 'Erro ao criar pedido');
