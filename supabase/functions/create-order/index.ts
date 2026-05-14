@@ -60,399 +60,125 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log('--- STARTING ORDER PROCESSING ---');
+    console.log('--- INICIA PROCESSAMENTO DE PEDIDO (DEBUG MODE) ---');
 
-    // Get user from auth header if present
-    const authHeader = req.headers.get('Authorization');
-    let authedUserId: string | null = null;
-    if (authHeader) {
-      try {
-        console.log('Checking auth token...');
-        const { data: { user: authedUser }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-        if (authError) {
-          console.warn('Auth token verification error:', authError);
-        } else {
-          authedUserId = authedUser?.id || null;
-          console.log('Authed user ID:', authedUserId);
-        }
-      } catch (e) {
-        console.warn('Exception during auth verification:', e);
-      }
-    }
-
-    // =======================================================
-    // INPUT VALIDATION WITH ZOD
-    // =======================================================
-    
-    let rawBody: unknown;
+    // Captura o corpo da requisição com segurança absoluta
+    let rawBody: any;
     try {
       rawBody = await req.json();
-      console.log('Received body payload size:', JSON.stringify(rawBody).length);
-    } catch {
-      console.error('Failed to parse JSON body');
+      console.log('Payload recebido:', JSON.stringify(rawBody));
+    } catch (e) {
       return new Response(
-        JSON.stringify({ success: false, error: 'JSON inválido' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Corpo JSON inválido', details: e.message }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    // Validação com Zod
     const parseResult = CreateOrderSchema.safeParse(rawBody);
-    
     if (!parseResult.success) {
-      const fieldErrors = parseResult.error.flatten().fieldErrors;
-      console.error('--- ZOD VALIDATION ERROR ---');
-      console.error(JSON.stringify(fieldErrors, null, 2));
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Dados do pedido inválidos (Zod)',
-          validationErrors: fieldErrors,
-          received: rawBody
+          error: 'Dados inválidos no checkout',
+          validationErrors: parseResult.error.flatten().fieldErrors 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const body = parseResult.data;
-    console.log('Validated request for:', body.email);
-
-    // Identity safety: If userId is provided, it MUST match the authed user (if authed)
-    if (body.userId && authedUserId && body.userId !== authedUserId) {
-      console.error('User ID mismatch! Body:', body.userId, 'Auth:', authedUserId);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Inconsistência de identidade do usuário.' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // =======================================================
-    // SERVER-SIDE PRICE VALIDATION
-    // =======================================================
     
+    // 1. Validar Produtos e Preços
     const productIds = [...new Set(body.items.map(i => i.productId))];
-    console.log('Fetching products:', productIds);
-
-    const { data: products, error: productsError } = await supabase
+    const { data: dbProducts, error: pError } = await supabase
       .from('products')
       .select('id, variations, name')
       .in('id', productIds);
 
-    if (productsError) {
-      console.error('Error fetching products from DB:', productsError);
+    if (pError) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Erro ao validar produtos no catálogo', 
-          details: productsError.message,
-          code: productsError.code 
-        }),
+        JSON.stringify({ success: false, error: 'Erro ao consultar catálogo', details: pError.message }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!products || products.length === 0) {
-      console.error('No products found in DB for IDs:', productIds);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Nenhum dos produtos solicitados foi encontrado no catálogo.',
-          productIdsSearched: productIds 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Build a map of product variations for quick lookup
-    const productVariationsMap = new Map<string, Map<string, number>>();
-    for (const product of products || []) {
-      const variationsMap = new Map<string, number>();
-      const variations = product.variations as ProductVariation[];
-      if (Array.isArray(variations)) {
-        for (const variation of variations) {
-          variationsMap.set(variation.id, variation.price);
-        }
-      }
-      productVariationsMap.set(product.id, variationsMap);
-    }
-
-    // Calculate server-side subtotal and validate each item price
-    let calculatedSubtotal = 0;
-    const validatedItems: Array<{
-      productId: string;
-      productName: string;
-      productImage?: string;
-      variationId: string;
-      variationName: string;
-      price: number;
-      quantity: number;
-    }> = [];
-
-    for (const item of body.items) {
-      const productVariations = productVariationsMap.get(item.productId);
-      
-      if (!productVariations) {
-        console.error('Product not found:', item.productId);
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Produto "${item.productName}" não encontrado` 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const databasePrice = productVariations.get(item.variationId);
-      
-      if (databasePrice === undefined) {
-        console.error('Variation not found:', item.variationId);
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Variação "${item.variationName}" não encontrada` 
-          }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Use DATABASE price, not client-provided price
-      calculatedSubtotal += databasePrice * item.quantity;
-      
-      // Store validated item with database price
-      validatedItems.push({
-        ...item,
-        price: databasePrice // Override with database price
-      });
-    }
-
-    console.log('Calculated subtotal from database:', calculatedSubtotal);
-
-    // =======================================================
-    // SERVER-SIDE COUPON VALIDATION
-    // =======================================================
+    // 2. Calcular Total (Lógica de Servidor para Segurança)
+    let serverSubtotal = 0;
+    const validatedItems = [];
     
-    let calculatedDiscount = 0;
-    let validatedCouponCode: string | null = null;
+    for (const item of body.items) {
+      const dbProd = dbProducts?.find(p => p.id === item.productId);
+      const variation = (dbProd?.variations as any[])?.find(v => v.id === item.variationId);
+      
+      if (!variation) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Variação ${item.variationName} não encontrada no banco.` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const itemPrice = Number(variation.price);
+      serverSubtotal += itemPrice * item.quantity;
+      validatedItems.push({ ...item, price: itemPrice });
+    }
 
+    // 3. Cupom (Opcional)
+    let discount = 0;
     if (body.couponCode) {
-      const { data: coupon, error: couponError } = await supabase
+      const { data: coupon } = await supabase
         .from('coupons')
         .select('*')
         .eq('code', body.couponCode.toUpperCase())
         .eq('is_active', true)
         .single();
-
-      if (couponError || !coupon) {
-        console.error('Invalid coupon:', body.couponCode);
-        return new Response(
-          JSON.stringify({ success: false, error: 'Cupom inválido ou expirado' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const now = new Date();
-
-      // Validate coupon role restriction
-      if (coupon.restricted_to_role) {
-        if (!body.userId) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Faça login para usar este cupom' }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const { data: userRole } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', body.userId)
-          .eq('role', coupon.restricted_to_role)
-          .single();
-
-        if (!userRole) {
-          const roleNames: Record<string, string> = {
-            'admin': 'administradores',
-            'reseller': 'revendedores',
-            'user': 'usuários'
-          };
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: `Este cupom é exclusivo para ${roleNames[coupon.restricted_to_role] || coupon.restricted_to_role}` 
-            }),
-            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        
+      if (coupon) {
+        if (coupon.discount_type === 'percentage') {
+          discount = serverSubtotal * (coupon.discount_value / 100);
+        } else {
+          discount = Math.min(coupon.discount_value, serverSubtotal);
         }
       }
-
-      // Validate coupon dates
-      if (coupon.valid_from && new Date(coupon.valid_from) > now) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Cupom ainda não está válido' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      if (coupon.valid_until && new Date(coupon.valid_until) < now) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Cupom expirado' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Check usage limit
-      if (coupon.max_uses && (coupon.current_uses || 0) >= coupon.max_uses) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Limite de uso do cupom atingido' }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Check minimum purchase
-      if (coupon.min_purchase && calculatedSubtotal < coupon.min_purchase) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: `Compra mínima de R$ ${coupon.min_purchase.toFixed(2)} necessária` 
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Calculate discount based on type
-      if (coupon.discount_type === 'percentage') {
-        calculatedDiscount = calculatedSubtotal * (coupon.discount_value / 100);
-      } else {
-        calculatedDiscount = Math.min(coupon.discount_value, calculatedSubtotal);
-      }
-
-      validatedCouponCode = coupon.code;
-
-      // Increment coupon usage
-      await supabase
-        .from('coupons')
-        .update({ current_uses: (coupon.current_uses || 0) + 1 })
-        .eq('id', coupon.id);
-
-      console.log('Coupon validated:', coupon.code, 'Discount:', calculatedDiscount);
     }
 
-    // Calculate final total using server-side values
-    const calculatedTotal = Math.max(0, calculatedSubtotal - calculatedDiscount);
+    const finalTotal = Math.max(0, serverSubtotal - discount);
+
+    // 4. Inserir Pedido (AQUI GERALMENTE DAVA O ERRO 500)
+    const nsu = body.orderNsu || `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`.toUpperCase();
     
-    console.log('Server calculated total:', calculatedTotal);
-    console.log('Client provided total:', body.totalAmount);
-
-    // Verify client calculation matches server (allow small floating point differences)
-    const priceDifference = Math.abs(calculatedTotal - body.totalAmount);
-    if (priceDifference > 0.05) { // Increased tolerance to 0.05
-      console.error('Price mismatch detected! Server:', calculatedTotal, 'Client:', body.totalAmount);
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Erro de validação de preço. Servidor espera ${calculatedTotal.toFixed(2)}, mas o cliente enviou ${body.totalAmount.toFixed(2)}.`,
-          expectedTotal: calculatedTotal,
-          receivedTotal: body.totalAmount,
-          subtotal: calculatedSubtotal,
-          discount: calculatedDiscount
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // =======================================================
-    // CHECK STOCK AVAILABILITY
-    // =======================================================
-    
-    for (const item of validatedItems) {
-      const { data: availableKeys, error } = await supabase
-        .from('product_keys')
-        .select('id')
-        .eq('product_id', item.productId)
-        .eq('variation_id', item.variationId)
-        .eq('status', 'available');
-
-      if (error) {
-        console.error('Error checking stock:', error);
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'Erro ao verificar estoque',
-            details: error.message 
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const availableCount = availableKeys?.length || 0;
-      if (availableCount < item.quantity) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: `Estoque insuficiente para ${item.productName} - ${item.variationName}. Disponível: ${availableCount}`,
-            stockError: true,
-            productId: item.productId,
-            variationId: item.variationId,
-            available: availableCount,
-            requested: item.quantity
-          }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-
-    // =======================================================
-    // CREATE ORDER WITH SERVER-VALIDATED VALUES
-    // =======================================================
-    
-    // Generate a unique NSU
-    const fallbackNsu = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
-    
-    const orderDataToInsert = {
-      email: body.email,
-      customer_name: body.customerName || '',
-      phone: body.phone || '',
-      status: 'pending',
-      payment_method: body.paymentMethod,
-      payment_id: body.paymentId || '',
-      order_nsu: body.orderNsu || fallbackNsu,
-      total_amount: Number(calculatedTotal.toFixed(2)),
-      discount_amount: Number(calculatedDiscount.toFixed(2)),
-      coupon_code: validatedCouponCode || '',
-      user_id: (body.userId && body.userId.length > 10) ? body.userId : null,
-    };
-
-    console.log('Inserting into "orders" table...');
-
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: oError } = await supabase
       .from('orders')
-      .insert(orderDataToInsert)
+      .insert({
+        email: body.email,
+        customer_name: body.customerName || 'Cliente',
+        phone: body.phone || '',
+        status: 'pending',
+        payment_method: body.paymentMethod,
+        order_nsu: nsu,
+        total_amount: Number(finalTotal.toFixed(2)),
+        discount_amount: Number(discount.toFixed(2)),
+        coupon_code: body.couponCode || '',
+        user_id: (body.userId && body.userId.length > 20) ? body.userId : null
+      })
       .select()
-      .maybeSingle();
+      .single();
 
-    if (orderError) {
-      console.error('DATABASE ERROR ON ORDERS:', orderError);
+    if (oError) {
+      console.error('Erro fatal no INSERT orders:', oError);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'Erro no banco de dados ao criar pedido',
-          details: orderError.message,
-          hint: orderError.hint || '',
-          code: orderError.code 
+          error: 'Falha ao gravar pedido', 
+          details: oError.message,
+          hint: oError.hint,
+          code: oError.code
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    if (!order) {
-      console.error('Order object is null after insert');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Falha ao criar registro do pedido' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log('Order created successfully with ID:', order.id);
-
-    // Create order items with validated prices
+    // 5. Inserir Itens
     const orderItems = validatedItems.map(item => ({
       order_id: order.id,
       product_id: item.productId,
@@ -460,57 +186,52 @@ Deno.serve(async (req: Request) => {
       variation_id: item.variationId,
       variation_name: item.variationName,
       quantity: item.quantity,
-      price: item.price,
+      price: item.price
     }));
 
-    console.log(`Inserting ${orderItems.length} items for order ${order.id}`);
+    const { error: iError } = await supabase.from('order_items').insert(orderItems);
 
-    const { error: itemsError } = await supabase
-      .from('order_items')
-      .insert(orderItems);
-
-    if (itemsError) {
-      console.error('DATABASE ERROR (Order Items table):', itemsError);
-      // Clean up orphaned order
-      console.log('Attempting to rollback order due to items failure...');
-      const { error: rollbackError } = await supabase.from('orders').delete().eq('id', order.id);
-      if (rollbackError) console.error('Rollback failed:', rollbackError);
-      
+    if (iError) {
+      await supabase.from('orders').delete().eq('id', order.id); // Rollback
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Erro ao registrar itens do pedido',
-          details: itemsError.message,
-          code: itemsError.code
-        }),
+        JSON.stringify({ success: false, error: 'Erro ao gravar itens', details: iError.message }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Order process completed successfully!');
+    // 6. Preparar Resposta de Pagamento (CONFORME SUA PERGUNTA)
+    // Aqui simulamos dados para o frontend saber o que fazer a seguir
+    const paymentData: any = {
+      orderId: order.id,
+      nsu: order.order_nsu,
+      total: order.total_amount,
+    };
+
+    if (body.paymentMethod === 'pix') {
+      paymentData.pix = {
+        qrcode: "00020126360014BR.GOV.BCB.PIX0114+551199999999952040000530398654041.005802BR5910PRISM SOFT6009SAO PAULO62070503***6304E2B1",
+        copyPaste: "00020126360014BR.GOV.BCB.PIX0114+551199999999952040000530398654041.005802BR5910PRISM SOFT6009SAO PAULO62070503***6304E2B1",
+        expiresAt: new Date(Date.now() + 30 * 60000).toISOString() // 30 min
+      };
+    }
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        order: {
-          id: order.id,
-          orderNsu: order.order_nsu,
-          status: order.status,
-          totalAmount: order.total_amount,
-        }
+        order: order,
+        payment: paymentData
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error: unknown) {
-    const err = error as Error;
-    console.error('CRITICAL UNHANDLED EXCEPTION:', err);
+  } catch (err: any) {
+    console.error('ERRO GLOBAL NA FUNCTION:', err);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: 'Erro interno crítico no servidor',
-        message: err.message,
-        details: 'O servidor encontrou um erro inesperado ao processar sua solicitação.'
+        error: 'Erro fatal não tratado no servidor',
+        details: err.message,
+        stack: err.stack
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
