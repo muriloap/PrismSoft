@@ -177,7 +177,7 @@ const CheckoutPage = () => {
 
       if (paymentMethod === 'pix') {
         if (orderData.payment && (orderData.payment.pixCode || orderData.payment.publicPaymentUrl)) {
-          // Success case: clear cart only AFTER we've saved the payment info to local storage
+          // Success case: save payment info and go to payment page
           localStorage.setItem('current-payment', JSON.stringify({ 
             ...orderData.payment, 
             orderId: orderData.order.id, 
@@ -188,7 +188,8 @@ const CheckoutPage = () => {
           navigate(`/pagamento?order_nsu=${encodeURIComponent(orderNsu)}`);
         } else {
           console.error("PIX missing in success response:", orderData);
-          throw new Error('O pedido foi criado, mas os dados de pagamento não foram gerados. Tente novamente em instantes ou contate o suporte.');
+          const details = orderData.debugInfo || JSON.stringify(orderData);
+          throw new Error('O pedido foi criado, mas os dados de pagamento (Pix) não foram retornados pelo gateway. Tente novamente em instantes.');
         }
       } else {
         // InfinitePay

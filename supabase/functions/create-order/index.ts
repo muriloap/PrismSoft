@@ -146,7 +146,9 @@ Deno.serve(async (req) => {
 
     // --- LÓGICA DE PAGAMENTO BLACKCAT (UNIFICADA) ---
     let payment = null;
-    if (data.paymentMethod === 'pix') {
+    const isPix = data.paymentMethod.toLowerCase() === 'pix';
+    
+    if (isPix) {
       const bcKey = Deno.env.get('BLACKCAT_API_KEY')?.trim();
       
       if (!bcKey) {
@@ -156,8 +158,15 @@ Deno.serve(async (req) => {
 
       try {
         const projectId = supabaseUrl.split('//')[1].split('.')[0];
+        
+        // Minimum amount check (some gateways require at least R$ 1,00)
+        const amountCents = Math.round(data.totalAmount * 100);
+        if (amountCents < 100) {
+           throw new Error('O valor mínimo para pagamento via Pix é de R$ 1,00.');
+        }
+
         const payload = {
-          amount: Math.round(data.totalAmount * 100),
+          amount: amountCents,
           currency: 'BRL',
           paymentMethod: 'pix',
           items: data.items.map(i => ({
@@ -169,15 +178,15 @@ Deno.serve(async (req) => {
           customer: {
             name: (data.customerName || 'Cliente').substring(0, 100),
             email: data.email,
-            phone: (data.phone || '11999999999').replace(/\D/g, ''),
-            document: { number: '12345678909', type: 'cpf' }, // Dummy valid-format CPF
+            phone: (data.phone || '11999999999').replace(/\D/g, '').padEnd(11, '0').substring(0, 11),
+            document: { number: '05449234041', type: 'cpf' }, // Valid checksum dummy CPF
           },
           pix: { expiresInDays: 1 },
           postbackUrl: `https://${projectId}.supabase.co/functions/v1/blackcat-webhook`,
           externalRef: nsu,
         };
 
-        console.log('Calling BlackCat with key:', bcKey.substring(0, 10) + '...');
+        console.log('Calling BlackCat Sales Create...');
         const bcResp = await fetch('https://api.blackcatpay.com.br/api/sales/create-sale', {
           method: 'POST',
           headers: { 
@@ -189,90 +198,38 @@ Deno.serve(async (req) => {
         });
 
         const bcDataFetched = await bcResp.json();
-        console.log('BlackCat Create Response Status:', bcResp.status);
+        console.log('BlackCat Status:', bcResp.status);
         
         if (!bcResp.ok) {
-          console.error('BlackCat HTTP Error:', bcResp.status, JSON.stringify(bcDataFetched));
+          console.error('BlackCat Error Body:', JSON.stringify(bcDataFetched));
           throw new Error(bcDataFetched.message || `Gateway indisponível (Status ${bcResp.status})`);
         }
 
         if (bcDataFetched.success && (bcDataFetched.data || bcDataFetched.sale || bcDataFetched.payment)) {
           const tx = bcDataFetched.data || bcDataFetched.sale || bcDataFetched.payment;
           
-          // Comprehensive mapping
+          // Ultra-Recursive data extractor
           const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
           
-          // Extract PIX code (Copia e Cola) - Ultra Defensive Mapping
-          let pixCode = pd.copyPaste || 
-                         pd.qrCode || 
-                         pd.pixCode || 
-                         pd.payload || 
-                         pd.emv || 
-                         pd.copia_e_cola || 
-                         pd.code || 
-                         pd.pix_code ||
-                         pd.brcode ||
-                         pd.pix_payload ||
-                         pd.pixData?.copyPaste ||
-                         pd.data?.copyPaste ||
-                         tx.copyPaste || 
-                         tx.pix_code || 
-                         tx.payload ||
-                         tx.pix_payload ||
-                         tx.pixCode ||
-                         tx.pix_code_brcode ||
-                         tx.brcode ||
-                         '';
+          let pixCode = pd.copyPaste || pd.qrCode || pd.pixCode || pd.payload || pd.emv || pd.copia_e_cola || 
+                         pd.code || pd.pix_code || pd.brcode || pd.pix_payload || pd.pixData?.copyPaste ||
+                         tx.copyPaste || tx.pix_code || tx.payload || tx.pixCode || tx.brcode || '';
           
-          // Extract QR Code (Base64)
-          const qrBase64 = pd.qrCodeBase64 || 
-                          pd.qrcode_base64 || 
-                          pd.qrContent || 
-                          pd.qrCodeContent || 
-                          pd.base64 || 
-                          pd.qr_code ||
-                          pd.qrcode ||
-                          pd.image ||
-                          pd.qr_image ||
-                          tx.qr_code_base64 ||
-                          tx.qrcode ||
-                          tx.qrCodeImage ||
-                          tx.image_base64 ||
-                          tx.qr_image_base64 ||
-                          '';
+          const qrBase64 = pd.qrCodeBase64 || pd.qrcode_base64 || pd.qrContent || pd.qrCodeContent || 
+                           pd.base64 || pd.qr_code || pd.qrcode || pd.image || pd.qr_image ||
+                           tx.qr_code_base64 || tx.qrcode || tx.qrCodeImage || tx.image_base64 || '';
           
-          // Extract expiration
-          const expiresAt = pd.expiresAt || 
-                           pd.expires_at || 
-                           pd.expirationDate || 
-                           pd.valid_until ||
-                           pd.expires_in ||
-                           pd.expired_at ||
-                           tx.expires_at ||
-                           tx.expirationDate ||
-                           tx.valid_until ||
-                           new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+          const expiresAt = pd.expiresAt || pd.expires_at || pd.expirationDate || pd.valid_until ||
+                            tx.expires_at || tx.expirationDate || 
+                            new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
           
           const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id || tx.external_id || tx.order_id || tx.payment_id;
           
-          // Ultra-Defensive: Search for any PIX payload pattern recursively if not found
+          // Final pattern search fallback
           if (!pixCode) {
             const findPixPattern = (obj: any): string | null => {
               if (!obj) return null;
-              if (typeof obj === 'string') {
-                if (obj.startsWith('000201')) return obj;
-                try {
-                  const decoded = atob(obj);
-                  if (decoded.startsWith('000201')) return decoded;
-                } catch(e) {}
-                return null;
-              }
-              if (Array.isArray(obj)) {
-                for (const item of obj) {
-                  const found = findPixPattern(item);
-                  if (found) return found;
-                }
-              }
+              if (typeof obj === 'string' && obj.startsWith('000201')) return obj;
               if (obj !== null && typeof obj === 'object') {
                 for (const key in obj) {
                   const found = findPixPattern(obj[key]);
@@ -281,11 +238,7 @@ Deno.serve(async (req) => {
               }
               return null;
             };
-            const patternMatched = findPixPattern(bcDataFetched);
-            if (patternMatched) {
-              console.log('RECOVERED PIX FROM PATTERN MATCH!');
-              pixCode = patternMatched;
-            }
+            pixCode = findPixPattern(bcDataFetched) || '';
           }
 
           if (pixCode || tx.invoiceUrl || tx.payment_url || tx.checkout_url) {
@@ -296,26 +249,28 @@ Deno.serve(async (req) => {
                 ? (qrBase64.startsWith('data:') ? qrBase64 : `data:image/png;base64,${qrBase64}`) 
                 : (pixCode ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(pixCode)}` : ''),
               expiresDate: expiresAt,
-              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.payment_url || tx.checkout_url || '',
+              publicPaymentUrl: tx.invoiceUrl || tx.invoice_url || tx.paymentUrl || tx.url || tx.checkout_url || '',
             };
             
-            // Atualiza o payment_id no pedido
             if (transactionId) {
               await supabase.from('orders').update({ payment_id: String(transactionId) }).eq('id', order.id);
             }
           } else {
-            console.error('PIX data missing in BlackCat response. Response body:', JSON.stringify(bcDataFetched));
-            throw new Error('O gateway não retornou os dados de pagamento. Tente novamente em instantes.');
+            console.error('PIX missing in success response. Body:', JSON.stringify(bcDataFetched));
+            throw new Error('Falha ao obter dados do Pix do gateway.');
           }
         } else {
-          console.error('BlackCat API ERROR:', JSON.stringify(bcDataFetched));
-          throw new Error(bcDataFetched.message || 'Erro na comunicação com o gateway de pagamento.');
+          console.error('BlackCat Success=False. Body:', JSON.stringify(bcDataFetched));
+          throw new Error(bcDataFetched.message || 'O gateway recusou a criação do Pix.');
         }
       } catch (bcError: any) {
-        console.error('Erro no gateway BlackCat:', bcError);
-        throw new Error(bcError.message || 'Falha ao processar pagamento via Pix.');
+        console.error('BlackCat Exception:', bcError);
+        throw bcError;
       }
+    } else if (data.paymentMethod.toLowerCase() === 'pagbank' || data.paymentMethod.toLowerCase() === 'card') {
+      // Logic for Card/InfinitePay could go here if managed by this function
     }
+
 
     return new Response(
       JSON.stringify({ success: true, order, payment }),

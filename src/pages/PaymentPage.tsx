@@ -19,6 +19,7 @@ interface PaymentData {
   expiresDate: string;
   orderId?: string;
   orderNsu?: string;
+  publicPaymentUrl?: string;
 }
 
 const PaymentPage = () => {
@@ -63,8 +64,9 @@ const PaymentPage = () => {
               value: order.total_amount,
               pixCode: prev?.pixCode || '',
               status: order.status,
-              expiresDate: order.created_at ? new Date(new Date(order.created_at).getTime() + 30 * 60 * 1000).toISOString() : '',
-              qrCodeImage: prev?.qrCodeImage || ''
+              expiresDate: order.created_at ? new Date(new Date(order.created_at).getTime() + 24 * 60 * 60 * 1000).toISOString() : '',
+              qrCodeImage: prev?.qrCodeImage || '',
+              publicPaymentUrl: prev?.publicPaymentUrl || ''
             }));
           }
         }
