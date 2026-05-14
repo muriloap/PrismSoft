@@ -51,10 +51,14 @@ Deno.serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('Environment variables missing');
+      console.error('CRITICAL: Environment variables SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY are missing');
       return new Response(
-        JSON.stringify({ success: false, error: 'Configuração do servidor incompleta (Env vars)' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          success: false, 
+          error: 'Configuração do servidor incompleta',
+          details: 'As variáveis de ambiente SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não foram encontradas no Supabase Edge Runtime.'
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -109,16 +113,40 @@ Deno.serve(async (req: Request) => {
     
     for (const item of body.items) {
       const dbProd = dbProducts?.find(p => p.id === item.productId);
-      const variation = (dbProd?.variations as any[])?.find(v => v.id === item.variationId);
+      const variationsArr = dbProd?.variations;
+      
+      if (!dbProd) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Produto ${item.productName} não encontrado no catálogo.` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!Array.isArray(variationsArr)) {
+        console.error('Variations is not an array for product:', dbProd.id);
+        return new Response(
+          JSON.stringify({ success: false, error: `Configuração do produto ${item.productName} inválida (variations).` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const variation = variationsArr.find((v: any) => v.id === item.variationId);
       
       if (!variation) {
         return new Response(
-          JSON.stringify({ success: false, error: `Variação ${item.variationName} não encontrada no banco.` }),
+          JSON.stringify({ success: false, error: `Variação ${item.variationName} não encontrada no banco para o produto ${item.productName}.` }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
       
       const itemPrice = Number(variation.price);
+      if (isNaN(itemPrice)) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Preço inválido para ${item.variationName}.` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       serverSubtotal += itemPrice * item.quantity;
       validatedItems.push({ ...item, price: itemPrice });
     }
