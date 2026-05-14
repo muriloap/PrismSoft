@@ -307,41 +307,51 @@ const CheckoutPage = () => {
       }
 
       if (paymentMethod === 'pix') {
-        // PIX payment via BlackCat Pay
+        // PIX payment via BlackCat Pay (using the new payment-processor endpoint)
         const productNames = items.map(item => `${item.productName} (${item.variationName})`).join(', ');
 
-        const { data, error } = await supabase.functions.invoke('blackcat-create-payment', {
-          body: {
-            value: total,
-            description: `Compra: ${productNames}`,
-            customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || 'Cliente',
-            customerEmail: contactInfo.email,
-            customerPhone: contactInfo.phone || '11999999999',
-            expiresIn: 3600,
-            orderId: orderData.order.id,
-            orderNsu: orderNsu,
-            items: items.map(item => ({
-              title: `${item.productName} - ${item.variationName}`,
-              quantity: item.quantity,
-              unitPrice: item.price,
-            })),
+        console.log('--- CHAMANDO PROCESSADOR DE PAGAMENTO ---');
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('payment-processor', {
+            body: {
+              value: total,
+              description: `Compra: ${productNames}`,
+              customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || 'Cliente',
+              customerEmail: contactInfo.email,
+              customerPhone: contactInfo.phone || '11999999999',
+              expiresIn: 3600,
+              orderId: orderData.order.id,
+              orderNsu: orderNsu,
+              items: items.map(item => ({
+                title: `${item.productName} - ${item.variationName}`,
+                quantity: item.quantity,
+                unitPrice: item.price,
+              })),
+            }
+          });
+
+          console.log('Resultado do processador:', { data, error });
+
+          if (error) {
+            // Se houver erro de rede/CORS que o Supabase captura
+            throw new Error(`Falha na conexão com o gateway: ${error.message || 'Sem resposta do servidor'}`);
           }
-        });
 
-        if (error) {
-          throw new Error(error.message || 'Erro ao criar pagamento');
-        }
-
-        if (data.success && data.payment) {
-          localStorage.setItem('current-payment', JSON.stringify({
-            ...data.payment,
-            orderId: orderData.order.id,
-            orderNsu: orderNsu,
-          }));
-          clearCart();
-          navigate('/pagamento');
-        } else {
-          throw new Error(data.error || 'Erro ao processar pagamento');
+          if (data && data.success && data.payment) {
+            localStorage.setItem('current-payment', JSON.stringify({
+              ...data.payment,
+              orderId: orderData.order.id,
+              orderNsu: orderNsu,
+            }));
+            clearCart();
+            navigate('/pagamento');
+          } else {
+            throw new Error(data?.error || 'O gateway de pagamento não pôde processar o seu pedido no momento.');
+          }
+        } catch (funcErr) {
+          console.error('Erro ao invocar payment-processor:', funcErr);
+          throw funcErr;
         }
       } else {
         // Card payment via InfinitePay

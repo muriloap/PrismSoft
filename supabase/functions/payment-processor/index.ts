@@ -9,62 +9,48 @@ const corsHeaders = {
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
 
 Deno.serve(async (req) => {
-  console.log(`[HTTP] Method: ${req.method}`);
-
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // Check multiple possible env var names
-    const apiKey = Deno.env.get('BLACKCAT_API_KEY')?.trim() || 
-                   Deno.env.get('BLACKCAT_API_KEY_PROD')?.trim() ||
-                   Deno.env.get('BLACKCAT_PAY_API_KEY')?.trim();
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    // Check multiple potential names for the API Key
+    const apiKey = Deno.env.get('BLACKCAT_API_KEY')?.trim() || 
+                   Deno.env.get('BLACKCAT_PAY_API_KEY')?.trim() ||
+                   Deno.env.get('BLACKCAT_KEY')?.trim();
 
     if (!apiKey) {
-      console.error('ERRO: Nenhuma chave de API BlackCat encontrada no ambiente (BLACKCAT_API_KEY)');
+      console.error('API Key Missing');
       return new Response(
-        JSON.stringify({ success: false, error: 'Gateway não configurado no env do Supabase' }),
+        JSON.stringify({ success: false, error: 'Chave de API BlackCat não encontrada (verifique o Dash do Supabase)' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
-    
-    let body;
-    try {
-      body = await req.json();
-    } catch (e) {
-      console.error('ERRO: Falha ao ler JSON', e);
-      return new Response(JSON.stringify({ success: false, error: 'JSON malformado' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
-    }
+    const body = await req.json();
 
     const { value, customerName, customerEmail, customerPhone, items, orderId, orderNsu } = body;
     
-    // Fallback names for items
-    const finalItems = items || body.items || [];
-
-    if (!value || !customerEmail || !finalItems || !Array.isArray(finalItems)) {
-      console.error('ERRO: Dados insuficientes', { value, customerEmail, hasItems: !!finalItems });
-      return new Response(JSON.stringify({ success: false, error: 'Dados obrigatórios ausentes' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!value || !customerEmail || !items) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Dados insuficientes para o pagamento' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    const cleanPhone = String(customerPhone || '').replace(/\D/g, '') || '11999999999';
-    const cleanDoc = '00000000000';
-    
     const projectId = supabaseUrl!.split('//')[1].split('.')[0];
     const postbackUrl = `https://${projectId}.supabase.co/functions/v1/blackcat-webhook`;
 
-    const blackcatPayload = {
+    // Prepare Payload
+    const payload = {
       amount: Math.round(Number(value) * 100),
       currency: 'BRL',
       paymentMethod: 'pix',
-      items: finalItems.map((i: any) => ({
+      items: items.map((i: any) => ({
         title: String(i.title || i.productName || 'Produto').substring(0, 100),
         unitPrice: Math.round((Number(i.unitPrice || i.price || 0)) * 100),
         quantity: Number(i.quantity || 1),
@@ -73,19 +59,18 @@ Deno.serve(async (req) => {
       customer: {
         name: String(customerName || 'Cliente').substring(0, 100),
         email: customerEmail,
-        phone: cleanPhone,
+        phone: String(customerPhone || '11999999999').replace(/\D/g, ''),
         document: {
-          number: cleanDoc,
+          number: '00000000000',
           type: 'cpf',
         },
       },
       pix: { expiresInDays: 1 },
       postbackUrl,
       externalRef: String(orderNsu || orderId || `ORD-${Date.now()}`),
-      metadata: String(body.description || ''),
     };
 
-    console.log(`[BlackCat] Criando venda para ${customerEmail} - Valor: ${value}`);
+    console.log(`[Processor] Forwarding to BlackCat API for ${customerEmail}`);
 
     const bcResp = await fetch(`${BLACKCAT_API_URL}/sales/create-sale`, {
       method: 'POST',
@@ -93,18 +78,18 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
         'X-API-Key': apiKey,
       },
-      body: JSON.stringify(blackcatPayload),
+      body: JSON.stringify(payload),
     });
 
     const bcData = await bcResp.json();
 
-    if (!bcResp.ok || !bcData.success) {
-      console.error('[BlackCat] API Error:', bcData);
+    if (!bcData.success) {
+      console.error('[BlackCat] Detailed Error:', bcData);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'O gateway de pagamento recusou o processamento', 
-          details: bcData.message || bcData.error || 'Erro externo' 
+          error: 'Gateway recusou a transação', 
+          details: bcData.message || bcData.error 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -112,11 +97,7 @@ Deno.serve(async (req) => {
 
     const tx = bcData.data;
     if (orderId && tx?.transactionId) {
-      try {
-        await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', orderId);
-      } catch (dbErr) {
-        console.warn('[DB] Erro ao salvar payment_id:', dbErr);
-      }
+      await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', orderId);
     }
 
     return new Response(
@@ -136,13 +117,9 @@ Deno.serve(async (req) => {
     );
 
   } catch (err: any) {
-    console.error('[FATAL] Erro na Edge Function:', err);
+    console.error('[Processor] Exception:', err);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: 'Erro excepcional no servidor', 
-        details: err.message 
-      }),
+      JSON.stringify({ success: false, error: 'Erro de processamento PIX', details: err.message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
