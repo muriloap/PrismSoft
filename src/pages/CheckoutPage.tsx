@@ -194,26 +194,44 @@ const CheckoutPage = () => {
         userId: user?.id || null,
       };
 
-      console.log('Sending order payload:', orderPayload);
+      console.log('--- CHAMANDO EDGE FUNCTION (create-order) ---');
+      console.log('Payload:', orderPayload);
 
-      const { data: orderData, error: orderError } = await supabase.functions.invoke('create-order', {
-        body: orderPayload
-      });
+      let orderData, orderError;
+      try {
+        const result = await supabase.functions.invoke('create-order', {
+          body: orderPayload
+        });
+        orderData = result.data;
+        orderError = result.error;
+      } catch (err: any) {
+        console.error('CRITICAL: Erro na chamada da função!', err);
+        throw new Error(`Falha técnica na comunicação com o servidor: ${err.message}`);
+      }
 
-      console.log('Order Result:', { data: orderData, error: orderError });
+      console.log('Resposta da função recebida:', { orderData, orderError });
 
       if (orderError) {
-        console.error('--- DETALHES DO ERRO DA FUNÇÃO ---');
-        console.error('Nome do erro:', orderError.name);
+        console.error('--- ERRO RETORNADO PELA FUNÇÃO ---');
+        console.error('Status/Nome:', orderError.name);
         console.error('Mensagem:', orderError.message);
         
-        // Em muitas versões do supabase-js, o corpo do erro 400 está aqui
-        try {
-          const detailData = (orderError as any).context || (orderError as any).details;
-          if (detailData) {
-            console.error('Contexto/Detalhes Brutos:', detailData);
+        // Em muitos casos o corpo da resposta 400 está em context ou details
+        const details = (orderError as any).details || (orderError as any).context;
+        if (details) {
+          console.error('Detalhes do erro (BRUTO):', details);
+          
+          if (typeof details === 'object') {
+            if (details.validationErrors) {
+              console.error('ERROS DE VALIDAÇÃO ZOD:', details.validationErrors);
+              const fields = Object.keys(details.validationErrors).join(', ');
+              throw new Error(`Campos inválidos: ${fields}. Verifique o console.`);
+            }
+            if (details.error) {
+              throw new Error(details.error);
+            }
           }
-        } catch (e) {}
+        }
         
         throw new Error(orderError.message || 'Erro ao criar pedido');
       }

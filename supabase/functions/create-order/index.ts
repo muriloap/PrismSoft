@@ -81,12 +81,14 @@ Deno.serve(async (req: Request) => {
     
     if (!parseResult.success) {
       const fieldErrors = parseResult.error.flatten().fieldErrors;
-      console.error('Validation error details:', JSON.stringify(fieldErrors, null, 2));
+      console.error('--- ZOD VALIDATION ERROR ---');
+      console.error(JSON.stringify(fieldErrors, null, 2));
       return new Response(
         JSON.stringify({ 
           success: false, 
           error: 'Dados do pedido inválidos (Zod)',
-          validationErrors: fieldErrors 
+          validationErrors: fieldErrors,
+          received: rawBody
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -100,17 +102,26 @@ Deno.serve(async (req: Request) => {
     // =======================================================
     
     const productIds = [...new Set(body.items.map(i => i.productId))];
+    console.log('Fetching products:', productIds);
 
-    const { data: products, error: productsError } = await supabase
+    const { data: products, error: productsError } = await supabaseClient
       .from('products')
-      .select('id, variations')
+      .select('id, variations, name')
       .in('id', productIds);
 
     if (productsError) {
-      console.error('Error fetching products:', productsError);
+      console.error('Error fetching products from DB:', productsError);
       return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao validar produtos' }),
+        JSON.stringify({ success: false, error: 'Erro ao validar produtos no banco de dados', details: productsError }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!products || products.length === 0) {
+      console.error('No products found in DB for IDs:', productIds);
+      return new Response(
+        JSON.stringify({ success: false, error: 'Nenhum dos produtos solicitados foi encontrado no catálogo.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
