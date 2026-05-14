@@ -11,27 +11,27 @@ const corsHeaders = {
 // =======================================================
 
 const CartItemSchema = z.object({
-  productId: z.string().min(1).max(100, { message: "ID do produto inválido" }),
-  productName: z.string().min(1).max(200, { message: "Nome do produto muito longo" }),
-  productImage: z.string().max(2000).optional().nullable(),
-  variationId: z.string().min(1).max(100, { message: "ID da variação inválido" }),
-  variationName: z.string().min(1).max(200, { message: "Nome da variação muito longo" }),
-  price: z.number().min(0).max(999999, { message: "Preço inválido" }),
-  quantity: z.number().int().positive().max(100, { message: "Quantidade inválida" }),
+  productId: z.string().min(1, { message: "ID do produto faltando" }),
+  productName: z.string().min(1),
+  productImage: z.string().optional().nullable(),
+  variationId: z.string().min(1, { message: "ID da variação faltando" }),
+  variationName: z.string().min(1),
+  price: z.number(),
+  quantity: z.number().int().positive(),
 });
 
 const CreateOrderSchema = z.object({
-  items: z.array(CartItemSchema).min(1, { message: "Carrinho vazio" }).max(50, { message: "Muitos itens no carrinho" }),
-  email: z.string().email({ message: "Email inválido" }).max(255),
-  customerName: z.string().max(200).optional().nullable(),
-  phone: z.string().max(30).optional().nullable(),
-  paymentMethod: z.enum(['pix', 'card', 'free']),
-  paymentId: z.string().max(100).optional().nullable(),
-  orderNsu: z.string().max(100).optional().nullable(),
-  totalAmount: z.number().min(0).max(999999, { message: "Valor total inválido" }),
-  discountAmount: z.number().min(0).max(999999).optional().nullable(),
-  couponCode: z.string().max(50).optional().nullable(),
-  userId: z.string().uuid().optional().nullable(),
+  items: z.array(CartItemSchema).min(1),
+  email: z.string().email(),
+  customerName: z.string().optional().nullable(),
+  phone: z.string().optional().nullable(),
+  paymentMethod: z.string(),
+  paymentId: z.string().optional().nullable(),
+  orderNsu: z.string().optional().nullable(),
+  totalAmount: z.number(),
+  discountAmount: z.number().optional().nullable(),
+  couponCode: z.string().optional().nullable(),
+  userId: z.string().optional().nullable(),
 });
 
 interface ProductVariation {

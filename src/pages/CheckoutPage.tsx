@@ -200,31 +200,26 @@ const CheckoutPage = () => {
         body: orderPayload
       });
 
+      console.log('Order Result:', { data: orderData, error: orderError });
+
       if (orderError) {
-        console.error('Function invoke error:', orderError);
+        console.error('--- DETALHES DO ERRO DA FUNÇÃO ---');
+        console.error('Nome do erro:', orderError.name);
+        console.error('Mensagem:', orderError.message);
         
-        // Tentar extrair detalhes de validação se houver
-        if (orderError instanceof Error && 'details' in orderError) {
-          const details = (orderError as any).details;
-          console.error('SERVER ERROR DETAILS:', details);
-          
-          if (details && typeof details === 'object') {
-             if ('validationErrors' in details) {
-               console.error('ERRO DE VALIDAÇÃO DO PEDIDO (ZOD):', details.validationErrors);
-               // Criar uma mensagem amigável dos erros de campo
-               const fields = Object.keys(details.validationErrors).join(', ');
-               throw new Error(`Campos inválidos no pedido: ${fields}. Verifique o console.`);
-             }
-             if ('error' in details) {
-               throw new Error(details.error);
-             }
+        // Em muitas versões do supabase-js, o corpo do erro 400 está aqui
+        try {
+          const detailData = (orderError as any).context || (orderError as any).details;
+          if (detailData) {
+            console.error('Contexto/Detalhes Brutos:', detailData);
           }
-        }
+        } catch (e) {}
         
         throw new Error(orderError.message || 'Erro ao criar pedido');
       }
 
       if (!orderData || !orderData.success) {
+        console.error('Resposta de insucesso da função:', orderData);
         const msg = orderData?.error || 'Erro desconhecido ao criar pedido';
         if (orderData?.stockError) {
           toast({
