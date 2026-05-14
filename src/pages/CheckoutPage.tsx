@@ -194,52 +194,55 @@ const CheckoutPage = () => {
         userId: user?.id || null,
       };
 
-      console.log('--- CHAMANDO EDGE FUNCTION (create-order) ---');
+      console.log('--- CHAMANDO API LOCAL (create-order) ---');
       console.log('Payload:', orderPayload);
 
-      let orderData, orderError;
+      let orderData;
       try {
-        const result = await supabase.functions.invoke('create-order', {
-          body: orderPayload
-        });
-        orderData = result.data;
-        orderError = result.error;
-      } catch (err: any) {
-        console.error('CRITICAL: Erro na chamada da função!', err);
-        throw new Error(`Falha técnica na comunicação com o servidor: ${err.message}`);
-      }
-
-      console.log('Resposta da função recebida:', { orderData, orderError });
-
-      if (orderError) {
-        console.error('--- ERRO RETORNADO PELA FUNÇÃO (CATCH) ---');
-        console.error('Status/Nome:', orderError.name);
-        console.error('Mensagem:', orderError.message);
+        const apiUrl = `${window.location.origin}/api/create-order`;
+        console.log('Fetching from:', apiUrl);
         
-        // Em muitos casos o corpo da resposta HTTP está em context ou details
-        const details = (orderError as any).details || (orderError as any).context;
-        if (details) {
-          console.error('Detalhes Brutos:', details);
-          if (typeof details === 'object' && details.error) {
-            throw new Error(details.error);
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(orderPayload),
+        });
+
+        console.log('Response Status:', response.status);
+        
+        if (!response.ok) {
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            orderData = await response.json();
+            console.error('--- ERRO RETORNADO PELA API LOCAL ---', orderData);
+            if (orderData.validationErrors) {
+              const fields = Object.keys(orderData.validationErrors).join(', ');
+              throw new Error(`Dados inválidos nos campos: ${fields}`);
+            }
+            throw new Error(orderData.error || 'Erro ao processar pedido no servidor local');
+          } else {
+            const textError = await response.text();
+            console.error('Resposta não-JSON recebida:', textError);
+            throw new Error(`Erro do servidor (${response.status}): Resposta inesperada`);
           }
         }
-        
-        throw new Error(orderError.message || 'Erro ao criar pedido');
+
+        orderData = await response.json();
+        console.log('Sucesso! Resposta da API:', orderData);
+
+      } catch (err: unknown) {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        console.error('Falha crítica na comunicação:', err);
+        throw new Error(`Erro de conexão: ${errorMessage}. Verifique se o servidor está online.`);
       }
 
-      if (!orderData || orderData.success === false) {
-        console.error('--- RESPOSTA DE INSUCESSO (SUCCESS: FALSE) ---', orderData);
-        
-        const msg = orderData?.error || 'Erro desconhecido ao processar pedido';
-        
-        if (orderData?.validationErrors) {
-          console.error('Erros de validação ZOD:', orderData.validationErrors);
-          const fields = Object.keys(orderData.validationErrors).join(', ');
-          throw new Error(`Dados inválidos nos campos: ${fields}`);
-        }
-
-        if (orderData?.stockError) {
+      if (!orderData || !orderData.success) {
+        // This handles cases where response is 200 but success is false if we used that pattern
+        // (but my Express server returns 400/500 for errors)
+        const msg = orderData.error || 'Erro ao processar pedido';
+        if (orderData.stockError) {
           toast({
             title: "Estoque insuficiente",
             description: msg,
@@ -247,7 +250,6 @@ const CheckoutPage = () => {
           });
           return;
         }
-        
         throw new Error(msg);
       }
 
