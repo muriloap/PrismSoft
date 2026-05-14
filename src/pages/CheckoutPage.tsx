@@ -195,28 +195,46 @@ const CheckoutPage = () => {
         console.log('Resultado bruto da função:', result);
         orderData = result.data;
         orderError = result.error;
+
+        // If the function returned an error in the response structure (even with status 200)
+        // or if invoke captured a non-2xx status as orderError
+        if (orderError) {
+          console.error('--- ERRO DETECTADO NA CHAMADA ---', orderError);
+          
+          // Try to extract body from the response if available in the error object
+          // Supabase FunctionsHttpError often has a response property
+          if (orderError.context?.response) {
+            try {
+              const errorBody = await orderError.context.response.json();
+              console.error('Corpo do erro 500 extraído:', errorBody);
+              const message = errorBody.details || errorBody.message || errorBody.error || orderError.message;
+              throw new Error(message);
+            } catch (jsonErr) {
+              console.warn('Não foi possível ler o JSON do erro 500:', jsonErr);
+            }
+          }
+          
+          throw new Error(orderError.message || 'Erro técnico na função create-order');
+        }
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('FALHA CRÍTICA NA CHAMADA DA FUNÇÃO:', err);
-        throw new Error(`Erro de conexão com o servidor de pedidos: ${errorMessage}. Verifique se as Edge Functions estão ativas.`);
+        console.error('FALHA NA EXECUÇÃO DO CHECKOUT:', err);
+        throw new Error(errorMessage);
       }
 
-      console.log('Resposta processada:', { orderData, orderError });
-
-      if (orderError) {
-        console.error('--- ERRO DE SISTEMA NA FUNÇÃO ---', orderError);
-        throw new Error(orderError.message || 'Erro técnico na função create-order');
-      }
-
+      console.log('Resposta processada:', { orderData });
+      
       if (!orderData || orderData.success === false) {
         console.error('--- ERRO DE LÓGICA NO PEDIDO ---', orderData);
         
-        const msg = orderData?.error || 'Erro desconhecido ao processar pedido no servidor';
+        // Extract the best possible error message
+        let msg = orderData?.error || 'Erro desconhecido ao processar pedido';
+        if (orderData?.details) msg += ` (${orderData.details})`;
         
         if (orderData?.validationErrors) {
           console.error('Erros de validação retornados:', orderData.validationErrors);
           const fields = Object.keys(orderData.validationErrors).join(', ');
-          throw new Error(`Dados inválidos (Zod): ${fields}`);
+          throw new Error(`Dados inválidos: ${fields}`);
         }
 
         if (orderData?.stockError) {

@@ -60,15 +60,23 @@ Deno.serve(async (req: Request) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+    console.log('--- STARTING ORDER PROCESSING ---');
+
     // Get user from auth header if present
     const authHeader = req.headers.get('Authorization');
     let authedUserId: string | null = null;
     if (authHeader) {
       try {
-        const { data: { user: authedUser } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
-        authedUserId = authedUser?.id || null;
+        console.log('Checking auth token...');
+        const { data: { user: authedUser }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''));
+        if (authError) {
+          console.warn('Auth token verification error:', authError);
+        } else {
+          authedUserId = authedUser?.id || null;
+          console.log('Authed user ID:', authedUserId);
+        }
       } catch (e) {
-        console.warn('Could not verify auth token:', e);
+        console.warn('Exception during auth verification:', e);
       }
     }
 
@@ -79,10 +87,9 @@ Deno.serve(async (req: Request) => {
     let rawBody: unknown;
     try {
       rawBody = await req.json();
-      console.log('--- RECEIVED BODY ---');
-      console.log(JSON.stringify(rawBody, null, 2));
-      console.log('----------------------');
+      console.log('Received body payload size:', JSON.stringify(rawBody).length);
     } catch {
+      console.error('Failed to parse JSON body');
       return new Response(
         JSON.stringify({ success: false, error: 'JSON inválido' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -387,35 +394,54 @@ Deno.serve(async (req: Request) => {
     // CREATE ORDER WITH SERVER-VALIDATED VALUES
     // =======================================================
     
-    const orderData = {
+    // Generate a shorter, safer NSU if not provided
+    const fallbackNsu = `ORD-${Date.now()}`.toUpperCase();
+    
+    const orderDataToInsert = {
       email: body.email,
-      customer_name: body.customerName || null,
-      phone: body.phone || null,
+      customer_name: body.customerName || '',
+      phone: body.phone || '',
       status: 'pending',
       payment_method: body.paymentMethod,
-      payment_id: body.paymentId || null,
-      order_nsu: body.orderNsu || `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      total_amount: calculatedTotal, // Use SERVER-CALCULATED total
-      discount_amount: calculatedDiscount, // Use SERVER-CALCULATED discount
-      coupon_code: validatedCouponCode,
+      payment_id: body.paymentId || '',
+      order_nsu: body.orderNsu || fallbackNsu,
+      total_amount: Number(calculatedTotal.toFixed(2)),
+      discount_amount: Number(calculatedDiscount.toFixed(2)),
+      coupon_code: validatedCouponCode || '',
       user_id: body.userId || null,
     };
 
+    console.log('Inserting into "orders" table:', JSON.stringify(orderDataToInsert));
+
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .insert(orderData)
+      .insert(orderDataToInsert)
       .select()
       .single();
 
     if (orderError) {
-      console.error('Error creating order:', orderError);
+      console.error('DATABASE ERROR ON ORDERS:', orderError);
       return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao criar pedido' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Erro no banco de dados ao criar pedido',
+          details: orderError.message,
+          hint: orderError.hint,
+          code: orderError.code 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } } // Status 200 for safe client catch
+      );
+    }
+
+    if (!order) {
+      console.error('Order object is null after insert, but no error was thrown');
+      return new Response(
+        JSON.stringify({ success: false, error: 'Falha silenciosa ao criar pedido' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Order created:', order.id);
+    console.log('Order created successfully with ID:', order.id);
 
     // Create order items with validated prices
     const orderItems = validatedItems.map(item => ({
@@ -425,24 +451,34 @@ Deno.serve(async (req: Request) => {
       variation_id: item.variationId,
       variation_name: item.variationName,
       quantity: item.quantity,
-      price: item.price, // This is now the DATABASE price
+      price: item.price,
     }));
+
+    console.log(`Inserting ${orderItems.length} items for order ${order.id}`);
 
     const { error: itemsError } = await supabase
       .from('order_items')
       .insert(orderItems);
 
     if (itemsError) {
-      console.error('Error creating order items:', itemsError);
-      // Rollback order
-      await supabase.from('orders').delete().eq('id', order.id);
+      console.error('DATABASE ERROR (Order Items table):', itemsError);
+      // Clean up orphaned order
+      console.log('Attempting to rollback order due to items failure...');
+      const { error: rollbackError } = await supabase.from('orders').delete().eq('id', order.id);
+      if (rollbackError) console.error('Rollback failed:', rollbackError);
+      
       return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao criar itens do pedido' }),
+        JSON.stringify({ 
+          success: false, 
+          error: 'Erro ao registrar itens do pedido',
+          details: itemsError.message,
+          code: itemsError.code
+        }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('Order items created');
+    console.log('Order process completed successfully!');
 
     return new Response(
       JSON.stringify({ 
@@ -458,9 +494,15 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (error: unknown) {
-    console.error('Error in create-order function:', error);
+    const err = error as Error;
+    console.error('CRITICAL UNHANDLED EXCEPTION:', err);
     return new Response(
-      JSON.stringify({ success: false, error: 'Erro interno' }),
+      JSON.stringify({ 
+        success: false, 
+        error: 'Erro interno crítico no servidor',
+        message: err.message,
+        stack: err.stack 
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
