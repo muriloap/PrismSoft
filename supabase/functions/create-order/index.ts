@@ -394,8 +394,8 @@ Deno.serve(async (req: Request) => {
     // CREATE ORDER WITH SERVER-VALIDATED VALUES
     // =======================================================
     
-    // Generate a shorter, safer NSU if not provided
-    const fallbackNsu = `ORD-${Date.now()}`.toUpperCase();
+    // Generate a unique NSU
+    const fallbackNsu = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`.toUpperCase();
     
     const orderDataToInsert = {
       email: body.email,
@@ -411,13 +411,13 @@ Deno.serve(async (req: Request) => {
       user_id: body.userId || null,
     };
 
-    console.log('Inserting into "orders" table:', JSON.stringify(orderDataToInsert));
+    console.log('Inserting into "orders" table...');
 
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert(orderDataToInsert)
       .select()
-      .single();
+      .maybeSingle();
 
     if (orderError) {
       console.error('DATABASE ERROR ON ORDERS:', orderError);
@@ -426,18 +426,18 @@ Deno.serve(async (req: Request) => {
           success: false, 
           error: 'Erro no banco de dados ao criar pedido',
           details: orderError.message,
-          hint: orderError.hint,
+          hint: orderError.hint || '',
           code: orderError.code 
         }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } } // Status 200 for safe client catch
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     if (!order) {
-      console.error('Order object is null after insert, but no error was thrown');
+      console.error('Order object is null after insert');
       return new Response(
-        JSON.stringify({ success: false, error: 'Falha silenciosa ao criar pedido' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Falha ao criar registro do pedido' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -501,9 +501,9 @@ Deno.serve(async (req: Request) => {
         success: false, 
         error: 'Erro interno crítico no servidor',
         message: err.message,
-        stack: err.stack 
+        details: 'O servidor encontrou um erro inesperado ao processar sua solicitação.'
       }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

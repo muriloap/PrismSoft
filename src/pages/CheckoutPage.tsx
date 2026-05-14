@@ -222,14 +222,17 @@ const CheckoutPage = () => {
         throw new Error(errorMessage);
       }
 
-      console.log('Resposta processada:', { orderData });
+      console.log('Resposta processada:', orderData);
       
       if (!orderData || orderData.success === false) {
         console.error('--- ERRO DE LÓGICA NO PEDIDO ---', orderData);
         
         // Extract the best possible error message
         let msg = orderData?.error || 'Erro desconhecido ao processar pedido';
-        if (orderData?.details) msg += ` (${orderData.details})`;
+        if (orderData?.details) {
+          console.error('Detalhes do erro do banco:', orderData.details);
+          msg += ` (${orderData.details})`;
+        }
         
         if (orderData?.validationErrors) {
           console.error('Erros de validação retornados:', orderData.validationErrors);
