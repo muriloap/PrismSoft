@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { PRODUCT_CATEGORIES } from "@/constants/categories";
 
 export interface Category {
   id: string;
@@ -15,59 +15,40 @@ export interface Category {
 
 export const useCategories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error] = useState<string | null>(null);
 
-  const fetchCategories = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("categories")
-        .select("*")
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (err: unknown) {
-      const error = err as Error;
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
+  const fetchCategories = useCallback(() => {
+    const fixedCategories: Category[] = PRODUCT_CATEGORIES.map((name, index) => ({
+      id: name.toLowerCase(),
+      name,
+      slug: name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '-').replace(/[^\w-]/g, ''),
+      description: `Produtos da categoria ${name}`,
+      icon: "Tag",
+      sort_order: index,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+    setCategories(fixedCategories);
   }, []);
 
   useEffect(() => {
     fetchCategories();
   }, [fetchCategories]);
 
-  const createCategory = async (
-    payload: Omit<Category, "id" | "created_at" | "updated_at">,
-  ) => {
-    const { data, error } = await supabase
-      .from("categories")
-      .insert(payload)
-      .select()
-      .single();
-    if (error) throw error;
-    await fetchCategories();
-    return data;
+  const createCategory = async () => {
+    // No-op for fixed categories
+    return null;
   };
 
-  const updateCategory = async (id: string, updates: Partial<Category>) => {
-    const { data, error } = await supabase
-      .from("categories")
-      .update(updates)
-      .eq("id", id)
-      .select()
-      .single();
-    if (error) throw error;
-    await fetchCategories();
-    return data;
+  const updateCategory = async () => {
+    // No-op for fixed categories
+    return null;
   };
 
-  const deleteCategory = async (id: string) => {
-    const { error } = await supabase.from("categories").delete().eq("id", id);
-    if (error) throw error;
-    await fetchCategories();
+  const deleteCategory = async () => {
+    // No-op for fixed categories
   };
 
   return {

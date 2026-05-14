@@ -190,13 +190,6 @@ const AdminDashboard = () => {
       color: "from-purple-500 to-indigo-500",
     },
     {
-      title: "Categorias",
-      description: "Inicializar categorias fixas",
-      icon: Tag,
-      href: "/admin/categories",
-      color: "from-amber-500 to-orange-500",
-    },
-    {
       title: "Keys & Estoque",
       description: "Gerenciar licenças e estoque",
       icon: Key,
