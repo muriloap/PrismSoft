@@ -33,6 +33,70 @@ const CheckoutPage = () => {
   const [couponInput, setCouponInput] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [contactInfo, setContactInfo] = useState({
+    firstName: '',
+    lastName: '',
+    email: user?.email || '',
+    phone: ''
+  });
+
+  // Fetch user profile to get phone number
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('full_name, phone')
+          .eq('id', user.id)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching profile:', error);
+          return;
+        }
+        
+        if (profile) {
+          // Parse full name into first and last name
+          const nameParts = (profile.full_name || '').trim().split(' ');
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.slice(1).join(' ') || '';
+          
+          setContactInfo(prev => ({
+            ...prev,
+            firstName: prev.firstName || firstName,
+            lastName: prev.lastName || lastName,
+            email: prev.email || user.email || '',
+            phone: prev.phone || profile.phone || ''
+          }));
+        }
+      } catch (err) {
+        console.error('Error fetching user profile:', err);
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
+
+  const handleApplyCoupon = async () => {
+    if (!couponInput.trim()) return;
+    
+    const result = await applyCoupon(couponInput);
+    if (result.success) {
+      toast({
+        title: "Cupom aplicado!",
+        description: "Desconto aplicado ao seu pedido.",
+      });
+      setCouponInput('');
+    } else {
+      toast({
+        title: "Cupom inválido",
+        description: result.error || "O código inserido não é válido.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handleCheckout = async () => {
     if (items.length === 0) {
@@ -243,8 +307,9 @@ const CheckoutPage = () => {
         }
       } else {
         // Card payment via InfinitePay
+        const projectId = supabase.supabaseUrl.split('//')[1].split('.')[0];
         const redirectUrl = `${window.location.origin}/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&email=${encodeURIComponent(contactInfo.email)}`;
-        const webhookUrl = `https://ysbybtrbfxjfjpybmlob.supabase.co/functions/v1/infinitepay-webhook`;
+        const webhookUrl = `https://${projectId}.supabase.co/functions/v1/infinitepay-webhook`;
 
         const checkoutItems = items.map(item => ({
           productName: item.productName,
