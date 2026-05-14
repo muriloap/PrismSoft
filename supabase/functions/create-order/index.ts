@@ -104,7 +104,7 @@ Deno.serve(async (req: Request) => {
     const productIds = [...new Set(body.items.map(i => i.productId))];
     console.log('Fetching products:', productIds);
 
-    const { data: products, error: productsError } = await supabaseClient
+    const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, variations, name')
       .in('id', productIds);
