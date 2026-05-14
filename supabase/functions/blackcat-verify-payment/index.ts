@@ -43,6 +43,8 @@ Deno.serve(async (req) => {
     }
 
     const { chargeId, orderId, orderNsu } = body;
+    console.log('Verifying payment:', { chargeId, orderId, orderNsu });
+
     if (!chargeId) {
       return new Response(JSON.stringify({ success: false, error: 'ID da transação não informado' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -50,21 +52,24 @@ Deno.serve(async (req) => {
 
     const resp = await fetch(`${BLACKCAT_API_URL}/sales/get-sale/${chargeId}`, {
       method: 'GET',
-      headers: { 'X-API-Key': apiKey },
+      headers: { 'X-API-Key': apiKey, 'Accept': 'application/json' },
     });
 
+    console.log('BlackCat Status Response code:', resp.status);
+    const dataFetched = await resp.json();
+    console.log('BlackCat Status Body:', JSON.stringify(dataFetched));
+
     if (!resp.ok) {
-      return new Response(JSON.stringify({ success: false, error: 'Erro ao consultar gateway' }),
+      return new Response(JSON.stringify({ success: false, error: 'Erro ao consultar gateway', details: `Status ${resp.status}` }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const data = await resp.json();
-    if (!data.success) {
-      return new Response(JSON.stringify({ success: false, error: data.message || 'Falha na resposta do gateway' }),
+    if (!dataFetched.success) {
+      return new Response(JSON.stringify({ success: false, error: dataFetched.message || 'Falha na resposta do gateway' }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const tx = data.data;
+    const tx = dataFetched.data || dataFetched.sale || dataFetched.payment || dataFetched;
     const status = (tx?.status || '').toLowerCase();
     const isPaid = status === 'paid' || status === 'confirmed' || status === 'paid_at';
     const isExpired = status === 'expired' || status === 'canceled';

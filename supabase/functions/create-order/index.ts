@@ -49,6 +49,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const bcKey = Deno.env.get('BLACKCAT_API_KEY')?.trim();
     
     if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error('Supabase configuration missing');
@@ -171,17 +172,19 @@ Deno.serve(async (req) => {
             externalRef: nsu,
           };
 
+          console.log('Calling BlackCat with key:', bcKey.substring(0, 5) + '...');
           const bcResp = await fetch('https://api.blackcatpay.com.br/api/sales/create-sale', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-API-Key': bcKey },
             body: JSON.stringify(payload),
           });
 
-          const bcData = await bcResp.json();
-          console.log('BlackCat Create Response:', JSON.stringify(bcData));
+          const bcDataFetched = await bcResp.json();
+          console.log('BlackCat Create Response Status:', bcResp.status);
+          console.log('BlackCat Create Response Body:', JSON.stringify(bcDataFetched));
 
-          if (bcData.success && (bcData.data || bcData.sale || bcData.payment)) {
-            const tx = bcData.data || bcData.sale || bcData.payment;
+          if (bcDataFetched.success && (bcDataFetched.data || bcDataFetched.sale || bcDataFetched.payment)) {
+            const tx = bcDataFetched.data || bcDataFetched.sale || bcDataFetched.payment;
             
             // Comprehensive mapping
             const pd = tx.paymentData || tx.payment_data || tx.pix || tx.payment || tx;
@@ -239,6 +242,39 @@ Deno.serve(async (req) => {
             
             const transactionId = tx.transactionId || tx.id || tx.txid || tx.uuid || tx.sale_id || tx.external_id || tx.order_id || tx.payment_id;
             
+            // Ultra-Defensive: Search for any PIX payload pattern recursively if not found
+            if (!pixCode) {
+              const findPixPattern = (obj: any): string | null => {
+                if (!obj) return null;
+                if (typeof obj === 'string') {
+                  if (obj.startsWith('000201')) return obj;
+                  try {
+                    const decoded = atob(obj);
+                    if (decoded.startsWith('000201')) return decoded;
+                  } catch(e) {}
+                  return null;
+                }
+                if (Array.isArray(obj)) {
+                  for (const item of obj) {
+                    const found = findPixPattern(item);
+                    if (found) return found;
+                  }
+                }
+                if (obj !== null && typeof obj === 'object') {
+                  for (const key in obj) {
+                    const found = findPixPattern(obj[key]);
+                    if (found) return found;
+                  }
+                }
+                return null;
+              };
+              const patternMatched = findPixPattern(bcDataFetched);
+              if (patternMatched) {
+                console.log('RECOVERED PIX FROM PATTERN MATCH!');
+                pixCode = patternMatched;
+              }
+            }
+
             if (pixCode || tx.invoiceUrl || tx.payment_url || tx.checkout_url) {
               payment = {
                 id: transactionId ? String(transactionId) : `PIX-${Date.now()}`,
@@ -255,12 +291,12 @@ Deno.serve(async (req) => {
                 await supabase.from('orders').update({ payment_id: String(transactionId) }).eq('id', order.id);
               }
             } else {
-              console.error('PIX data missing in BlackCat response. Response body:', JSON.stringify(bcData));
+              console.error('PIX data missing in BlackCat response. Response body:', JSON.stringify(bcDataFetched));
               throw new Error('O gateway não retornou os dados de pagamento. Verifique sua configuração ou tente novamente.');
             }
           } else {
-            console.error('BlackCat API ERROR:', JSON.stringify(bcData));
-            throw new Error(bcData.message || 'Erro na comunicação com o gateway de pagamento.');
+            console.error('BlackCat API ERROR:', JSON.stringify(bcDataFetched));
+            throw new Error(bcDataFetched.message || 'Erro na comunicação com o gateway de pagamento.');
           }
         }
       } catch (bcError) {
