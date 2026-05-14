@@ -159,6 +159,7 @@ const PaymentSuccessPage = () => {
       });
     }
   };
+
   const getPaymentMethodIcon = () => {
     if (captureMethod === 'pix' || orderData?.paymentMethod === 'pix') {
       return <Zap className="h-6 w-6" />;

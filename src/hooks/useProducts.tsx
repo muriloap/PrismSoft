@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Json } from '@/integrations/supabase/types';
 
 export interface ProductVariation {
   id: string;
@@ -104,7 +105,7 @@ export const useProducts = () => {
       .from('products')
       .insert({
         ...product,
-        variations: product.variations as any,
+        variations: product.variations as unknown as Json,
       })
       .select()
       .single();
@@ -119,7 +120,7 @@ export const useProducts = () => {
       .from('products')
       .update({
         ...updates,
-        variations: updates.variations ? updates.variations as any : undefined,
+        variations: updates.variations ? updates.variations as unknown as Json : undefined,
       })
       .eq('id', id)
       .select()

@@ -1,9 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronRight, Shield, CreditCard, User, Mail, Phone, Trash2, Plus, Minus, Tag, X, Zap } from 'lucide-react';
+import { ChevronRight, Shield, CreditCard, User, Mail, Phone, Trash2, Plus, Minus, Tag, X, Zap, Copy, Check, RefreshCw, Clock, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +32,99 @@ const CheckoutPage = () => {
   const [couponInput, setCouponInput] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [paymentData, setPaymentData] = useState<{
+    id: string;
+    value: number;
+    status: string;
+    pixCode: string;
+    qrCodeImage: string;
+    expiresDate: string;
+    orderNsu: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<string>('');
+
+  // Timer for PIX expiration
+  useEffect(() => {
+    if (!paymentData || !showPaymentDialog) return;
+
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const expirationDate = new Date(paymentData.expiresDate).getTime();
+      const distance = expirationDate - now;
+
+      if (distance < 0) {
+        clearInterval(timer);
+        setTimeLeft('EXPIRADO');
+        return;
+      }
+
+      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+      setTimeLeft(`${minutes}:${seconds < 10 ? '0' : ''}${seconds}`);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [paymentData, showPaymentDialog]);
+
+  // Check payment status automatically
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+
+    if (showPaymentDialog && paymentData && paymentData.status !== 'paid') {
+      interval = setInterval(() => {
+        checkPaymentStatus();
+      }, 5000); // Check every 5 seconds
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [showPaymentDialog, paymentData, checkPaymentStatus]);
+
+  const checkPaymentStatus = useCallback(async () => {
+    if (!paymentData || checking) return;
+    
+    setChecking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('blackcat-verify-payment', {
+        body: { transactionId: paymentData.id }
+      });
+
+      if (!error && data.success) {
+        if (data.status === 'paid' || data.status === 'delivered') {
+          setPaymentData(prev => prev ? { ...prev, status: 'paid' } : null);
+          toast({
+            title: "Pagamento confirmado!",
+            description: "Seu pedido está sendo processado.",
+          });
+          
+          // Wait a bit and redirect to success page
+          setTimeout(() => {
+            setShowPaymentDialog(false);
+            navigate(`/sucesso?order_nsu=${paymentData.orderNsu}`);
+          }, 2000);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+    } finally {
+      setChecking(false);
+    }
+  }, [paymentData, checking, navigate, toast]);
+
+  const handleCopyPIX = () => {
+    if (!paymentData) return;
+    navigator.clipboard.writeText(paymentData.pixCode);
+    setCopied(true);
+    toast({
+      title: "Copiado!",
+      description: "Código PIX copiado para a área de transferência.",
+    });
+    setTimeout(() => setCopied(false), 2000);
+  };
   
   const [contactInfo, setContactInfo] = useState({
     firstName: '',
@@ -288,13 +388,13 @@ const CheckoutPage = () => {
         }
 
         if (data.success && data.payment) {
-          localStorage.setItem('current-payment', JSON.stringify({
+          setPaymentData({
             ...data.payment,
             orderId: orderData.order.id,
             orderNsu: orderNsu,
-          }));
+          });
+          setShowPaymentDialog(true);
           clearCart();
-          navigate('/pagamento');
         } else {
           throw new Error(data.error || 'Erro ao processar pagamento');
         }
@@ -673,6 +773,98 @@ const CheckoutPage = () => {
       </main>
 
       <Footer />
+
+      {/* PIX Payment Modal */}
+      <Dialog open={showPaymentDialog} onOpenChange={(open) => {
+        if (!open && paymentData?.status === 'paid') {
+          navigate(`/sucesso?order_nsu=${paymentData.orderNsu}`);
+        }
+        setShowPaymentDialog(open);
+      }}>
+        <DialogContent className="sm:max-w-md bg-card border-green-500/30">
+          <DialogHeader>
+            <DialogTitle className="text-center font-bold text-2xl flex items-center justify-center gap-2">
+              <Zap className="h-6 w-6 text-green-500 fill-green-500" />
+              Pagamento via PIX
+            </DialogTitle>
+            <DialogDescription className="text-center">
+              Pague agora para receber suas keys instantaneamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center space-y-6 py-4">
+            {/* Amount */}
+            <div className="text-center">
+              <span className="text-sm text-muted-foreground uppercase tracking-wider font-semibold">Valor a pagar</span>
+              <div className="text-3xl font-black text-green-500">{formatPrice(paymentData?.value || 0)}</div>
+            </div>
+
+            {/* QR Code */}
+            <div className="relative group">
+              <div className="absolute -inset-4 bg-green-500/10 rounded-full blur-2xl group-hover:bg-green-500/20 transition-all"></div>
+              <div className="relative bg-white p-4 rounded-2xl shadow-xl">
+                {paymentData?.qrCodeImage ? (
+                  <img 
+                    src={paymentData.qrCodeImage} 
+                    alt="PIX QR Code" 
+                    className="w-48 h-48 sm:w-56 sm:h-56"
+                  />
+                ) : (
+                  <div className="w-48 h-48 sm:w-56 sm:h-56 flex items-center justify-center bg-muted rounded-xl">
+                    <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Countdown */}
+            <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 rounded-full border border-border/50">
+              <Clock className="h-4 w-4 text-orange-500" />
+              <span className="text-sm font-medium">Expira em: <span className="font-mono text-orange-500">{timeLeft}</span></span>
+            </div>
+
+            {/* Copy PIX */}
+            <div className="w-full space-y-2">
+              <label className="text-xs font-bold text-muted-foreground uppercase ml-1">Código Copia e Cola</label>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-muted/30 border border-border rounded-xl p-3 font-mono text-xs truncate">
+                  {paymentData?.pixCode}
+                </div>
+                <Button 
+                  onClick={handleCopyPIX}
+                  variant={copied ? "default" : "outline"}
+                  size="icon"
+                  className="shrink-0 h-10 w-10 rounded-xl"
+                >
+                  {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                </Button>
+              </div>
+            </div>
+
+            {/* Status Footer */}
+            <div className="w-full space-y-4 pt-2">
+              <Button 
+                onClick={checkPaymentStatus} 
+                className="w-full h-12 bg-green-600 hover:bg-green-700 text-white font-bold gap-2"
+                disabled={checking || paymentData?.status === 'paid'}
+              >
+                {checking ? (
+                  <RefreshCw className="h-5 w-5 animate-spin" />
+                ) : paymentData?.status === 'paid' ? (
+                  <Check className="h-5 w-5" />
+                ) : (
+                  <Zap className="h-5 w-5" />
+                )}
+                {paymentData?.status === 'paid' ? 'Pagamento Confirmado!' : 'Já paguei, verificar agora'}
+              </Button>
+              
+              <p className="text-[10px] text-center text-muted-foreground italic">
+                Após o pagamento, o sistema identificará automaticamente em até 1 minuto.
+              </p>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
