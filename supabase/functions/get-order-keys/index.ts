@@ -83,7 +83,7 @@ const handler = async (req: Request): Promise<Response> => {
     // SECURITY: Verify email matches order
     // =======================================================
     
-    if (order.email.toLowerCase() !== body.email.toLowerCase()) {
+    if (body.email && order.email.toLowerCase() !== body.email.toLowerCase()) {
       console.warn('Email mismatch for order:', order.id);
       return new Response(
         JSON.stringify({ success: false, error: 'Email não corresponde ao pedido' }),

@@ -1,5 +1,4 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
@@ -27,17 +26,25 @@ const RequestSchema = z.object({
   })).min(1),
 });
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
   try {
     const apiKey = Deno.env.get('BLACKCAT_API_KEY');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
     if (!apiKey) {
-      return new Response(JSON.stringify({ success: false, error: 'API Key não configurada' }),
+      return new Response(JSON.stringify({ success: false, error: 'Variável BLACKCAT_API_KEY não configurada no Supabase' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return new Response(JSON.stringify({ success: false, error: 'Credenciais do Supabase ausentes ambiente da função' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     let raw: unknown;
     try { raw = await req.json(); } catch {

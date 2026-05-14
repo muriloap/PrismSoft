@@ -63,6 +63,7 @@ const AdminReports = () => {
   const [activeTab, setActiveTab] = useState<'orders' | 'audit'>('orders');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDelivering, setIsDelivering] = useState<string | null>(null);
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -139,6 +140,28 @@ const AdminReports = () => {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeliverKeys = async (orderId: string) => {
+    setIsDelivering(orderId);
+    try {
+      const { data, error } = await supabase.functions.invoke('auto-deliver-keys', {
+        body: { orderId }
+      });
+      if (error) throw error;
+      if (data.success) {
+        toast.success(data.message || "Entrega realizada com sucesso!");
+        fetchData();
+      } else {
+        toast.error(data.error || "Erro ao realizar entrega");
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error('Error delivering keys:', err);
+      toast.error(err.message || "Erro ao conectar com o servidor");
+    } finally {
+      setIsDelivering(null);
     }
   };
 
@@ -379,6 +402,7 @@ const AdminReports = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Status</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Pagamento</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Cupom</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Ações</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -433,6 +457,26 @@ const AdminReports = () => {
                               </span>
                             ) : (
                               '-'
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {order.status === 'paid' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+                                onClick={() => handleDeliverKeys(order.id)}
+                                disabled={isDelivering === order.id}
+                              >
+                                {isDelivering === order.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Key className="h-4 w-4 mr-1" />
+                                    Entregar
+                                  </>
+                                )}
+                              </Button>
                             )}
                           </td>
                         </tr>

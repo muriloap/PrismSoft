@@ -87,8 +87,8 @@ const App = () => (
                 <Route path="/reset-password" element={<ResetPasswordPage />} />
                 <Route path="/produto/:slug" element={<ProductPage />} />
                 <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/payment" element={<PaymentPage />} />
-                <Route path="/payment-success" element={<PaymentSuccessPage />} />
+                <Route path="/pagamento" element={<PaymentPage />} />
+                <Route path="/pagamento/sucesso" element={<PaymentSuccessPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/purchases" element={<PurchasesPage />} />
                 <Route path="/terms" element={<TermsPage />} />

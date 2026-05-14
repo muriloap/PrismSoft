@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle, Download, Home, Package, Clock, CreditCard, Zap, Key, Copy, Check, Loader2, ExternalLink, Mail, PartyPopper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -37,9 +37,18 @@ const PaymentSuccessPage = () => {
   const [retryCount, setRetryCount] = useState(0);
 
   // Email verification state
-  const [emailInput, setEmailInput] = useState('');
+  const [emailInput, setEmailInput] = useState(searchParams.get('email') || '');
   const [emailVerified, setEmailVerified] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  
+  // Auto-verify if email is present in search params
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam && !emailVerified) {
+      handleVerifyEmail(emailParam);
+    }
+  }, [searchParams, emailVerified, handleVerifyEmail]);
+
   const orderNsu = searchParams.get('order_nsu');
   const receiptUrl = searchParams.get('receipt_url');
   const captureMethod = searchParams.get('capture_method');
@@ -88,8 +97,9 @@ const PaymentSuccessPage = () => {
     };
     fetchOrderKeys();
   }, [emailVerified, orderNsu, emailInput, retryCount]);
-  const handleVerifyEmail = async () => {
-    if (!emailInput.trim()) {
+  const handleVerifyEmail = useCallback(async (overrideEmail?: string) => {
+    const emailToVerify = overrideEmail || emailInput.trim();
+    if (!emailToVerify) {
       toast({
         title: "Email obrigatório",
         description: "Digite o email usado na compra.",
@@ -105,7 +115,7 @@ const PaymentSuccessPage = () => {
       } = await supabase.functions.invoke('get-order-keys', {
         body: {
           orderNsu,
-          email: emailInput.trim()
+          email: emailToVerify
         }
       });
       if (error) {
@@ -118,6 +128,7 @@ const PaymentSuccessPage = () => {
       }
       if (data.success) {
         setEmailVerified(true);
+        if (overrideEmail) setEmailInput(overrideEmail);
         setOrderData(data.order);
         setDeliveredKeys(data.deliveredKeys || []);
         toast({
@@ -125,23 +136,28 @@ const PaymentSuccessPage = () => {
           description: "Suas chaves estão disponíveis abaixo."
         });
       } else {
-        toast({
-          title: "Email inválido",
-          description: data.error || "O email não corresponde ao pedido.",
-          variant: "destructive"
-        });
+        // Don't toast error if it was an auto-verify attempt that failed (unlikely if email is correct)
+        if (!overrideEmail) {
+          toast({
+            title: "Email inválido",
+            description: data.error || "O email não corresponde ao pedido.",
+            variant: "destructive"
+          });
+        }
       }
     } catch (error) {
       console.error('Error verifying email:', error);
-      toast({
-        title: "Erro",
-        description: "Erro ao verificar email. Tente novamente.",
-        variant: "destructive"
-      });
+      if (!overrideEmail) {
+        toast({
+          title: "Erro",
+          description: "Erro ao verificar email. Tente novamente.",
+          variant: "destructive"
+        });
+      }
     } finally {
       setVerifying(false);
     }
-  };
+  }, [emailInput, orderNsu, toast]);
   const handleCopyKey = async (keyValue: string, keyId: string) => {
     try {
       await navigator.clipboard.writeText(keyValue);

@@ -24,7 +24,7 @@ async function startServer() {
     app.use(vite.middlewares);
     
     // Explicit SPA fallback for dev mode if needed (though appType: 'spa' should handle it)
-    app.use('*', async (req, res, next) => {
+    app.use('(.*)', async (req, res, next) => {
       const url = req.originalUrl;
       try {
         // If it's not a file request, serve index.html
@@ -44,7 +44,7 @@ async function startServer() {
     app.use(express.static(distPath));
     
     // SPA fallback: serve index.html for all non-file routes
-    app.get('*', (req, res) => {
+    app.get('(.*)', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
