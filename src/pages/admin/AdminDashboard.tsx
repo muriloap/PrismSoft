@@ -191,7 +191,7 @@ const AdminDashboard = () => {
     },
     {
       title: "Categorias",
-      description: "Gerenciar grupos de produtos",
+      description: "Inicializar categorias fixas",
       icon: Tag,
       href: "/admin/categories",
       color: "from-amber-500 to-orange-500",

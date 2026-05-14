@@ -194,17 +194,13 @@ const AdminCategories = () => {
           </div>
           <div className="flex items-center gap-2">
             <Button 
-              variant="outline" 
+              variant="hero" 
               onClick={handleSeedDefaults} 
               disabled={isSeeding}
-              className="gap-2 rounded-xl"
+              className="gap-2"
             >
               {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Restaurar Padrão
-            </Button>
-            <Button variant="hero" onClick={handleOpenCreate} className="gap-2">
-              <Plus className="h-4 w-4" />
-              Nova Categoria
+              Restaurar Categorias Fixas
             </Button>
           </div>
         </div>
@@ -219,19 +215,14 @@ const AdminCategories = () => {
         ) : categories.length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-border rounded-3xl bg-card/50 backdrop-blur-sm">
             <Tag className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-20" />
-            <h3 className="text-xl font-semibold mb-2">Nenhuma categoria cadastrada</h3>
+            <h3 className="text-xl font-semibold mb-2">Categorias não inicializadas</h3>
             <p className="text-muted-foreground mb-8 max-w-sm mx-auto">
-              As categorias são fundamentais para organizar seus produtos. 
-              Você pode criar novas ou restaurar as categorias padrão do Prism System.
+              Clique no botão abaixo para inicializar as categorias fixas do sistema conforme solicitado.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button variant="hero" onClick={handleOpenCreate} className="gap-2 px-8">
-                <Plus className="h-4 w-4" />
-                Criar Manualmente
-              </Button>
-              <Button variant="outline" onClick={handleSeedDefaults} disabled={isSeeding} className="gap-2 px-8 rounded-2xl border-purple-500/30 hover:bg-purple-500/10">
+              <Button variant="hero" onClick={handleSeedDefaults} disabled={isSeeding} className="gap-2 px-12 h-12 shadow-xl shadow-purple-500/20">
                 {isSeeding ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Restaurar Categorias Padrão
+                Inicializar Categorias Fixas
               </Button>
             </div>
           </div>
@@ -239,10 +230,12 @@ const AdminCategories = () => {
           <div className="grid gap-4">
             {categories.map((category) => {
               const count = getProductCount(category.name);
+              const isFixed = PRODUCT_CATEGORIES.includes(category.name as any);
+              
               return (
                 <div
                   key={category.id}
-                  className="group bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:border-purple-500/50 transition-all hover:shadow-xl hover:shadow-purple-500/5"
+                  className="group bg-card rounded-2xl border border-border p-5 flex items-center gap-4 hover:border-purple-500/50 transition-all"
                 >
                   <div className="p-3 rounded-xl bg-muted group-hover:bg-purple-500/10 transition-colors">
                     <Tag className="h-6 w-6 text-muted-foreground group-hover:text-purple-500 transition-colors" />
@@ -251,12 +244,9 @@ const AdminCategories = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-1">
                       <h3 className="text-lg font-semibold truncate">{category.name}</h3>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-mono">
-                        ordem: {category.sort_order}
-                      </span>
-                      {!category.is_active && (
-                        <span className="px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-500 text-xs">
-                          Inativo
+                      {isFixed && (
+                        <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 text-[10px] font-bold uppercase tracking-wider">
+                          Fixa
                         </span>
                       )}
                     </div>
@@ -268,22 +258,7 @@ const AdminCategories = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleOpenEdit(category)}
-                      className="rounded-xl"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="text-red-500 hover:text-red-600 rounded-xl"
-                      onClick={() => handleOpenDelete(category)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <span className="text-xs text-muted-foreground italic mr-2">Configuração fixa</span>
                   </div>
                 </div>
               );

@@ -1,7 +1,7 @@
 
 export const PRODUCT_CATEGORIES = [
   "Streamings",
-  "IA Code",
+  "IA's Code",
   "DIscord",
   "Email's",
   "Contas"

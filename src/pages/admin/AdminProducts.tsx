@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Plus, Pencil, Trash2, Package, Loader2, Upload } from "lucide-react";
+import { ArrowLeft, Plus, Pencil, Trash2, Package, Loader2, Upload, RefreshCw } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useProducts, Product, ProductVariation } from "@/hooks/useProducts";
@@ -375,22 +375,48 @@ const AdminProducts = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="category">Categoria</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.name}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={formData.category}
+                    onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    required
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecione uma categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.length > 0 ? (
+                        categories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.name}>
+                            {cat.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        PRODUCT_CATEGORIES.map((cat) => (
+                          <SelectItem key={cat} value={cat}>
+                            {cat}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {categories.length === 0 && (
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      size="icon" 
+                      title="Sincronizar categorias fixas"
+                      onClick={() => navigate("/admin/categories")}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {categories.length === 0 && (
+                  <p className="text-[10px] text-yellow-500 mt-1">
+                    Cuidado: Categorias não inicializadas no banco. <button type="button" className="underline" onClick={() => navigate("/admin/categories")}>Clique aqui para inicializar.</button>
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="image_url">Imagem do Produto</Label>
