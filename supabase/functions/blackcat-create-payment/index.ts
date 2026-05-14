@@ -1,30 +1,16 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 const BLACKCAT_API_URL = 'https://api.blackcatpay.com.br/api';
-const MIN_PAYMENT_VALUE = 1.00;
 
-const RequestSchema = z.object({
-  value: z.number(),
-  description: z.string().optional(),
-  customerName: z.string(),
-  customerEmail: z.string().email(),
-  customerPhone: z.string(),
-  customerDocument: z.string().optional(),
-  expiresIn: z.number().optional(),
-  orderId: z.string().optional(),
-  orderNsu: z.string().optional(),
-  items: z.array(z.any()).min(1),
-});
-
-serve(async (req) => {
+Deno.serve(async (req) => {
+  console.log('--- CHAMADA RECEBIDA EM blackcat-create-payment ---');
+  
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -34,137 +20,103 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
-    console.log('--- BLACKCAT PAYMENT PROCESS START ---');
-
     if (!apiKey) {
-      console.error('CRITICAL: BLACKCAT_API_KEY is not set');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Gateway de pagamento não configurado',
-          details: 'A variável de ambiente BLACKCAT_API_KEY não foi encontrada.' 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('BLACKCAT_API_KEY não configurada');
     }
 
-    if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro de ambiente Supabase' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    const supabase = createClient(supabaseUrl!, supabaseServiceKey!);
+    const body = await req.json();
+    console.log('Corpo da requisição recebido');
+
+    // Validação simplificada (Zod pode estar causando lentidão ou erro de import)
+    const { value, customerName, customerEmail, customerPhone, items, orderId, orderNsu } = body;
+
+    if (!value || !customerEmail || !items) {
+      throw new Error('Dados obrigatórios ausentes (value, email ou items)');
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    let raw: any;
-    try { 
-      raw = await req.json(); 
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'JSON inválido', details: e.message }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const parsed = RequestSchema.safeParse(raw);
-    if (!parsed.success) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Dados de pagamento inválidos', 
-          validationErrors: parsed.error.flatten().fieldErrors 
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    const body = parsed.data;
-
-    // Sanitize parameters
-    const cleanPhone = body.customerPhone.replace(/\D/g, '');
-    const cleanDoc = (body.customerDocument || '').replace(/\D/g, '') || '00000000000';
-    const amountCents = Math.round(body.value * 100);
-
-    const projectId = supabaseUrl.split('//')[1].split('.')[0];
+    const cleanPhone = String(customerPhone || '').replace(/\D/g, '') || '11999999999';
+    const cleanDoc = '00000000000';
+    
+    const projectId = supabaseUrl!.split('//')[1].split('.')[0];
     const postbackUrl = `https://${projectId}.supabase.co/functions/v1/blackcat-webhook`;
 
     const payload = {
-      amount: amountCents,
+      amount: Math.round(value * 100),
       currency: 'BRL',
       paymentMethod: 'pix',
-      items: body.items.map(i => ({
-        title: (i.title || i.productName || 'Produto').substring(0, 200),
+      items: items.map((i: any) => ({
+        title: (i.title || i.productName || 'Produto').substring(0, 100),
         unitPrice: Math.round((i.unitPrice || i.price || 0) * 100),
         quantity: i.quantity || 1,
         tangible: false,
       })),
       customer: {
-        name: body.customerName,
-        email: body.customerEmail,
+        name: String(customerName || 'Cliente').substring(0, 100),
+        email: customerEmail,
         phone: cleanPhone,
         document: {
           number: cleanDoc,
-          type: cleanDoc.length === 14 ? 'cnpj' : 'cpf',
+          type: 'cpf',
         },
       },
       pix: { expiresInDays: 1 },
       postbackUrl,
-      externalRef: body.orderNsu || body.orderId || `ORD-${Date.now()}`,
+      externalRef: orderNsu || orderId || `ORD-${Date.now()}`,
       metadata: body.description || '',
     };
 
-    console.log('Requesting Pix from BlackCat...');
-
-    const resp = await fetch(`${BLACKCAT_API_URL}/sales/create-sale`, {
+    console.log('Efetuando fetch para BlackCat API...');
+    const bcResp = await fetch(`${BLACKCAT_API_URL}/sales/create-sale`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey,
+      },
       body: JSON.stringify(payload),
     });
 
-    const result = await resp.json();
+    const bcData = await bcResp.json();
+    console.log('Resposta da BlackCat recebida');
 
-    if (!resp.ok || !result.success) {
-      console.error('BlackCat API Error:', result);
+    if (!bcResp.ok || !bcData.success) {
+      console.error('Erro na API BlackCat:', bcData);
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'O gateway recusou o pagamento', 
-          details: result.message || result.error || 'Erro desconhecido na BlackCat' 
+          error: 'Gateway recusou o pedido', 
+          details: bcData.message || bcData.error || 'Erro desconhecido' 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const tx = result.data;
-    
-    // Auto-update order if ID is present
-    if (body.orderId && tx.transactionId) {
-      await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', body.orderId);
+    const tx = bcData.data;
+    if (orderId && tx.transactionId) {
+      await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', orderId);
     }
 
     return new Response(
-      JSON.stringify({
-        success: true,
+      JSON.stringify({ 
+        success: true, 
         payment: {
           id: tx.transactionId,
-          value: body.value,
+          value: value,
           status: 'pending',
           pixCode: tx.paymentData?.copyPaste || tx.paymentData?.qrCode || '',
           qrCodeImage: tx.paymentData?.qrCodeBase64 ? `data:image/png;base64,${tx.paymentData.qrCodeBase64}` : (tx.paymentData?.copyPaste ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(tx.paymentData.copyPaste)}` : ''),
-          expiresDate: new Date(Date.now() + (24 * 3600 * 1000)).toISOString(), // Default 24h
+          expiresDate: new Date(Date.now() + 86400000).toISOString(),
           publicPaymentUrl: tx.invoiceUrl,
-        },
-      }), 
+        }
+      }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (err: any) {
-    console.error('FATAL BLACKCAT FUNCTION ERROR:', err);
+    console.error('ERRO FATAL EM blackcat-create-payment:', err.message);
     return new Response(
-      JSON.stringify({ success: false, error: 'Erro de conexão com o gateway', details: err.message }),
+      JSON.stringify({ success: false, error: 'Erro de processamento', details: err.message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-

@@ -1,4 +1,3 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
@@ -7,10 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
-
-// =======================================================
-// INPUT VALIDATION SCHEMAS
-// =======================================================
 
 const CartItemSchema = z.object({
   productId: z.string(),
@@ -36,8 +31,7 @@ const CreateOrderSchema = z.object({
   userId: z.string().optional().nullable(),
 });
 
-serve(async (req: Request) => {
-  // Handle CORS preflight
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -47,129 +41,85 @@ serve(async (req: Request) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Configuração do servidor incompleta',
-          details: 'Deno.env variables missing.'
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error('Supabase configuration missing');
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    console.log('--- INICIA PROCESSAMENTO (V2) ---');
+    const body = await req.json();
 
-    let body: any;
-    try {
-      body = await req.json();
-    } catch (e) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'JSON inválido' }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Validação Schema
     const parseResult = CreateOrderSchema.safeParse(body);
     if (!parseResult.success) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Dados inválidos',
-          validationErrors: parseResult.error.flatten().fieldErrors 
-        }),
+        JSON.stringify({ success: false, error: 'Dados inválidos', validationErrors: parseResult.error.flatten().fieldErrors }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const validatedBody = parseResult.data;
+    const data = parseResult.data;
     
-    // 1. Validar Produtos
-    const productIds = [...new Set(validatedBody.items.map(i => i.productId))];
+    // Validar Produtos
+    const productIds = [...new Set(data.items.map(i => i.productId))];
     const { data: dbProducts, error: pError } = await supabase
       .from('products')
       .select('id, variations')
       .in('id', productIds);
 
     if (pError || !dbProducts) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro no catálogo', details: pError?.message }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      throw new Error(pError?.message || 'Erro ao consultar catálogo');
     }
 
-    // 2. Cálculo Total
+    // Cálculo Total
     let subtotal = 0;
-    const itemsToSave = [];
-    
-    for (const item of validatedBody.items) {
+    for (const item of data.items) {
       const product = dbProducts.find(p => p.id === item.productId);
       const variations = product?.variations as any[];
       const variation = variations?.find(v => v.id === item.variationId);
       
-      if (!variation) {
-        return new Response(
-          JSON.stringify({ success: false, error: `Variação ${item.variationName} não encontrada.` }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      const vPrice = Number(variation.price);
-      subtotal += vPrice * item.quantity;
-      itemsToSave.push({ ...item, price: vPrice });
+      if (!variation) throw new Error(`Variação ${item.variationName} não encontrada`);
+      subtotal += Number(variation.price) * item.quantity;
     }
 
-    // 3. Cupom
     let discount = 0;
-    if (validatedBody.couponCode) {
+    if (data.couponCode) {
       const { data: coupon } = await supabase
         .from('coupons')
         .select('*')
-        .eq('code', validatedBody.couponCode.toUpperCase())
+        .eq('code', data.couponCode.toUpperCase())
         .eq('is_active', true)
         .maybeSingle();
         
       if (coupon) {
-        if (coupon.discount_type === 'percentage') {
-          discount = subtotal * (coupon.discount_value / 100);
-        } else {
-          discount = Math.min(coupon.discount_value, subtotal);
-        }
+        discount = coupon.discount_type === 'percentage' 
+          ? subtotal * (coupon.discount_value / 100) 
+          : Math.min(coupon.discount_value, subtotal);
       }
     }
 
     const total = Math.max(0, subtotal - discount);
-    const nsu = validatedBody.orderNsu || `ORD-${Date.now()}`.toUpperCase();
+    const nsu = data.orderNsu || `ORD-${Date.now()}`.toUpperCase();
 
-    // 4. Gravar Pedido
+    // Gravar Pedido
     const { data: order, error: oError } = await supabase
       .from('orders')
       .insert({
-        email: validatedBody.email,
-        customer_name: validatedBody.customerName || 'Cliente',
-        phone: validatedBody.phone || '',
+        email: data.email,
+        customer_name: data.customerName || 'Cliente',
+        phone: data.phone || '',
         status: 'pending',
-        payment_method: validatedBody.paymentMethod,
+        payment_method: data.paymentMethod,
         order_nsu: nsu,
         total_amount: Number(total.toFixed(2)),
         discount_amount: Number(discount.toFixed(2)),
-        coupon_code: validatedBody.couponCode || '',
-        user_id: (validatedBody.userId && validatedBody.userId.length > 20) ? validatedBody.userId : null
+        coupon_code: data.couponCode || '',
+        user_id: (data.userId && data.userId.length > 20) ? data.userId : null
       })
       .select()
       .maybeSingle();
 
-    if (oError || !order) {
-      console.error('Insert error:', oError);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro ao gravar pedido', details: oError?.message }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    if (oError || !order) throw new Error(oError?.message || 'Erro ao criar pedido');
 
-    // 5. Gravar Itens
-    const orderItems = itemsToSave.map(item => ({
+    // Gravar Itens
+    const orderItems = data.items.map(item => ({
       order_id: order.id,
       product_id: item.productId,
       product_name: item.productName,
@@ -180,39 +130,17 @@ serve(async (req: Request) => {
     }));
 
     const { error: iError } = await supabase.from('order_items').insert(orderItems);
+    if (iError) throw new Error('Erro ao salvar itens do pedido');
 
-    if (iError) {
-      await supabase.from('orders').delete().eq('id', order.id);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Erro nos itens', details: iError.message }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // 6. Resposta Final
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        order,
-        payment: {
-          orderId: order.id,
-          nsu: order.order_nsu,
-          total: order.total_amount,
-          pix: validatedBody.paymentMethod === 'pix' ? {
-            qrcode: "00020126360014BR.GOV.BCB.PIX0114+551199999999952040000530398654041.005802BR5910PRISM SOFT6009SAO PAULO62070503***6304E2B1",
-            copyPaste: "00020126360014BR.GOV.BCB.PIX0114+551199999999952040000530398654041.005802BR5910PRISM SOFT6009SAO PAULO62070503***6304E2B1"
-          } : null
-        }
-      }),
+      JSON.stringify({ success: true, order }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (err: any) {
-    console.error('FATAL:', err);
     return new Response(
-      JSON.stringify({ success: false, error: 'Erro fatal', details: err.message }),
+      JSON.stringify({ success: false, error: err.message }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
-
