@@ -194,37 +194,41 @@ const CheckoutPage = () => {
         userId: user?.id || null,
       };
 
-      console.log('--- CHAMANDO SUPABASE EDGE FUNCTION (create-order) ---');
+      console.log('--- INICIANDO PROCESSO DE CHECKOUT ---');
       console.log('Payload:', orderPayload);
 
       let orderData, orderError;
       try {
+        console.log('Chamando supabase.functions.invoke("create-order")...');
         const result = await supabase.functions.invoke('create-order', {
           body: orderPayload
         });
+        
+        console.log('Resultado bruto da função:', result);
         orderData = result.data;
         orderError = result.error;
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('Falha técnica na comunicação:', err);
-        throw new Error(`Erro de conexão com o servidor de pedidos: ${errorMessage}`);
+        console.error('FALHA CRÍTICA NA CHAMADA DA FUNÇÃO:', err);
+        throw new Error(`Erro de conexão com o servidor de pedidos: ${errorMessage}. Verifique se as Edge Functions estão ativas.`);
       }
 
-      console.log('Resposta da função recebida:', { orderData, orderError });
+      console.log('Resposta processada:', { orderData, orderError });
 
       if (orderError) {
-        console.error('--- ERRO RETORNADO PELA FUNÇÃO (SYSTEM ERROR) ---', orderError);
-        throw new Error(orderError.message || 'Erro técnico ao processar pedido');
+        console.error('--- ERRO DE SISTEMA NA FUNÇÃO ---', orderError);
+        throw new Error(orderError.message || 'Erro técnico na função create-order');
       }
 
       if (!orderData || orderData.success === false) {
-        console.error('--- RESPOSTA DE INSUCESSO (LOGIC ERROR) ---', orderData);
+        console.error('--- ERRO DE LÓGICA NO PEDIDO ---', orderData);
         
-        const msg = orderData?.error || 'Erro desconhecido ao processar pedido';
+        const msg = orderData?.error || 'Erro desconhecido ao processar pedido no servidor';
         
         if (orderData?.validationErrors) {
+          console.error('Erros de validação retornados:', orderData.validationErrors);
           const fields = Object.keys(orderData.validationErrors).join(', ');
-          throw new Error(`Dados inválidos nos campos: ${fields}`);
+          throw new Error(`Dados inválidos (Zod): ${fields}`);
         }
 
         if (orderData?.stockError) {
@@ -239,7 +243,7 @@ const CheckoutPage = () => {
         throw new Error(msg);
       }
 
-      console.log('PEDIDO CRIADO COM SUCESSO!', orderData.order);
+      console.log('SUCESSO: PEDIDO CRIADO!', orderData.order);
 
       // Check if order is free (100% discount)
       const isFreeOrder = total < 1;
