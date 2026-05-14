@@ -132,8 +132,61 @@ Deno.serve(async (req) => {
     const { error: iError } = await supabase.from('order_items').insert(orderItems);
     if (iError) throw new Error('Erro ao salvar itens do pedido');
 
+    // --- LÓGICA DE PAGAMENTO BLACKCAT (UNIFICADA) ---
+    let payment = null;
+    if (data.paymentMethod === 'pix') {
+      try {
+        const bcKey = Deno.env.get('BLACKCAT_API_KEY')?.trim();
+        if (bcKey) {
+          const projectId = supabaseUrl.split('//')[1].split('.')[0];
+          const payload = {
+            amount: Math.round(data.totalAmount * 100),
+            currency: 'BRL',
+            paymentMethod: 'pix',
+            items: data.items.map(i => ({
+              title: i.productName.substring(0, 100),
+              unitPrice: Math.round(i.price * 100),
+              quantity: i.quantity,
+              tangible: false,
+            })),
+            customer: {
+              name: (data.customerName || 'Cliente').substring(0, 100),
+              email: data.email,
+              phone: (data.phone || '11999999999').replace(/\D/g, ''),
+              document: { number: '00000000000', type: 'cpf' },
+            },
+            pix: { expiresInDays: 1 },
+            postbackUrl: `https://${projectId}.supabase.co/functions/v1/blackcat-webhook`,
+            externalRef: nsu,
+          };
+
+          const bcResp = await fetch('https://api.blackcatpay.com.br/api/sales/create-sale', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-API-Key': bcKey },
+            body: JSON.stringify(payload),
+          });
+
+          const bcData = await bcResp.json();
+          if (bcData.success && bcData.data) {
+            const tx = bcData.data;
+            payment = {
+              id: tx.transactionId,
+              pixCode: tx.paymentData?.copyPaste || '',
+              qrCodeImage: tx.paymentData?.qrCodeBase64 ? `data:image/png;base64,${tx.paymentData.qrCodeBase64}` : '',
+              publicPaymentUrl: tx.invoiceUrl,
+            };
+            // Atualiza o payment_id no pedido
+            await supabase.from('orders').update({ payment_id: tx.transactionId }).eq('id', order.id);
+          }
+        }
+      } catch (bcError) {
+        console.error('Erro silencioso no gateway:', bcError);
+        // Não travamos a ordem se o gateway falhar, mas o app saberá lidar
+      }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, order }),
+      JSON.stringify({ success: true, order, payment }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

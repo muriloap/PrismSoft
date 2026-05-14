@@ -119,312 +119,118 @@ const CheckoutPage = () => {
     setIsProcessing(true);
     
     try {
-      const orderNsu = `ORDER-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const orderNsu = `ORD-${Date.now()}`.toUpperCase();
       
-      // Create order first to check stock and reserve
-      // (supports legacy carts that stored numeric productId)
-      const invalidItems = items.filter((i) => !isUuid(i.productId));
-      const slugToDbIdMap = new Map<string, string>();
+      const cartItems = items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        productImage: item.productImage,
+        variationId: item.variationId,
+        variationName: item.variationName,
+        price: item.price,
+        quantity: item.quantity,
+      }));
 
-      if (invalidItems.length > 0) {
-        const slugs = Array.from(
-          new Set(invalidItems.map((i) => i.productSlug).filter(Boolean))
-        );
-
-        if (slugs.length > 0) {
-          const { data: productsData, error: productsError } = await supabase
-            .from("products")
-            .select("id, slug")
-            .in("slug", slugs);
-
-          if (productsError) throw productsError;
-
-          (productsData || []).forEach((p) => {
-            slugToDbIdMap.set(p.slug, p.id);
-          });
+      const { data: orderData, error: orderError } = await supabase.functions.invoke('create-order', {
+        body: {
+          items: cartItems,
+          email: contactInfo.email,
+          customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim(),
+          phone: contactInfo.phone,
+          paymentMethod,
+          totalAmount: total,
+          discountAmount: discount,
+          couponCode: couponCode || null,
+          userId: user?.id,
+          orderNsu
         }
-      }
-
-      const cartItems = items.map((item) => {
-        const resolvedProductId = isUuid(item.productId)
-          ? item.productId
-          : slugToDbIdMap.get(item.productSlug) || item.productId;
-
-        return {
-          productId: resolvedProductId,
-          productName: item.productName,
-          productImage: item.productImage,
-          variationId: item.variationId,
-          variationName: item.variationName,
-          price: item.price,
-          quantity: item.quantity,
-        };
       });
 
-      const stillInvalid = cartItems.find((i) => !isUuid(i.productId));
-      if (stillInvalid) {
-        toast.error("Produto inválido no carrinho", {
-          description: "Remova o item do carrinho e adicione novamente.",
-        });
-        return;
+      if (orderError || !orderData?.success) {
+        throw new Error(orderError?.message || orderData?.error || 'Erro ao processar pedido');
       }
 
-      const orderPayload = {
-        items: cartItems,
-        email: contactInfo.email,
-        customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || null,
-        phone: contactInfo.phone || null,
-        paymentMethod: paymentMethod,
-        orderNsu: orderNsu,
-        totalAmount: total,
-        discountAmount: discount,
-        couponCode: couponCode || null,
-        userId: user?.id || null,
-      };
-
-      console.log('--- INICIANDO PROCESSO DE CHECKOUT ---');
-      console.log('Payload:', orderPayload);
-
-      let orderData, orderError;
-      try {
-        console.log('Chamando supabase.functions.invoke("create-order")...');
-        const result = await supabase.functions.invoke('create-order', {
-          body: orderPayload
+      // Pedido Gratuito
+      if (total < 1) {
+        await supabase.from('orders').update({ 
+          status: 'paid', 
+          payment_method: 'free', 
+          paid_at: new Date().toISOString() 
+        }).eq('id', orderData.order.id);
+        
+        await supabase.functions.invoke('auto-deliver-keys', { 
+          body: { orderId: orderData.order.id, orderNsu } 
         });
         
-        console.log('Resultado bruto da função:', result);
-        orderData = result.data;
-        orderError = result.error;
-
-        // If the function returned an error in the response structure (even with status 200)
-        // or if invoke captured a non-2xx status as orderError
-        if (orderError) {
-          console.error('--- ERRO DETECTADO NA CHAMADA ---', orderError);
-          
-          // Try to extract body from the response if available in the error object
-          // Supabase FunctionsHttpError often has a response property
-          if (orderError.context?.response) {
-            try {
-              const errorBody = await orderError.context.response.json();
-              console.error('Corpo do erro 500 extraído:', errorBody);
-              const message = errorBody.details || errorBody.message || errorBody.error || orderError.message;
-              throw new Error(message);
-            } catch (jsonErr) {
-              console.warn('Não foi possível ler o JSON do erro 500:', jsonErr);
-            }
-          }
-          
-          throw new Error(orderError.message || 'Erro técnico na função create-order');
-        }
-      } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('FALHA NA EXECUÇÃO DO CHECKOUT:', err);
-        throw new Error(errorMessage);
-      }
-
-      console.log('Resposta processada:', orderData);
-      
-      if (!orderData || orderData.success === false) {
-        console.error('--- ERRO DE LÓGICA NO PEDIDO ---', orderData);
+        localStorage.setItem('current-order', JSON.stringify({ 
+          orderId: orderData.order.id, 
+          orderNsu, 
+          items, 
+          total, 
+          createdAt: new Date().toISOString() 
+        }));
         
-        // Extract the best possible error message
-        let msg = orderData?.error || 'Erro desconhecido ao processar pedido';
-        if (orderData?.details) {
-          console.error('Detalhes do erro do banco:', orderData.details);
-          msg += ` (${orderData.details})`;
-        }
-        
-        if (orderData?.validationErrors) {
-          console.error('Erros de validação retornados:', orderData.validationErrors);
-          const fields = Object.keys(orderData.validationErrors).join(', ');
-          throw new Error(`Dados inválidos: ${fields}`);
-        }
-
-        if (orderData?.stockError) {
-          toast.error("Estoque insuficiente", {
-            description: msg,
-          });
-          return;
-        }
-        
-        throw new Error(msg);
-      }
-
-      console.log('SUCESSO: PEDIDO CRIADO!', orderData.order);
-
-      // Check if order is free (100% discount)
-      const isFreeOrder = total < 1;
-
-      if (isFreeOrder) {
-        // Free order - mark as paid and deliver keys automatically
-        console.log('Free order detected, processing automatic delivery');
-        
-        try {
-          // Update order status to paid
-          const { error: updateError } = await supabase
-            .from('orders')
-            .update({ 
-              status: 'paid',
-              payment_method: 'free',
-              paid_at: new Date().toISOString()
-            })
-            .eq('id', orderData.order.id);
-
-          if (updateError) {
-            console.error('Error updating order status:', updateError);
-          }
-
-          // Automatically deliver keys for free orders
-          const { data: deliveryData, error: deliveryError } = await supabase.functions.invoke('auto-deliver-keys', {
-            body: {
-              orderId: orderData.order.id,
-              orderNsu: orderNsu,
-            }
-          });
-
-          if (deliveryError) {
-            console.error('Error auto-delivering keys:', deliveryError);
-          } else {
-            console.log('Keys auto-delivered:', deliveryData);
-          }
-
-          // Store order data and navigate to success page
-          localStorage.setItem('current-order', JSON.stringify({
-            orderId: orderData.order.id,
-            orderNsu: orderNsu,
-            items: items,
-            total: total,
-            createdAt: new Date().toISOString(),
-          }));
-          
-          clearCart();
-          navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&capture_method=free`);
-        } catch (freeOrderError) {
-          console.error('Error processing free order:', freeOrderError);
-          throw new Error('Erro ao processar pedido gratuito');
-        }
+        clearCart();
+        navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&capture_method=free`);
         return;
       }
 
       if (paymentMethod === 'pix') {
-        // PIX payment via BlackCat Pay (using the new payment-processor endpoint)
-        const productNames = items.map(item => `${item.productName} (${item.variationName})`).join(', ');
-
-        console.log('--- CHAMANDO PROCESSADOR DE PAGAMENTO ---');
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('payment-processor', {
-            body: {
-              value: total,
-              description: `Compra: ${productNames}`,
-              customerName: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || 'Cliente',
-              customerEmail: contactInfo.email,
-              customerPhone: contactInfo.phone || '11999999999',
-              expiresIn: 3600,
-              orderId: orderData.order.id,
-              orderNsu: orderNsu,
-              items: items.map(item => ({
-                title: `${item.productName} - ${item.variationName}`,
-                quantity: item.quantity,
-                unitPrice: item.price,
-              })),
-            }
-          });
-
-          console.log('Resultado do processador:', { data, error });
-
-          if (error) {
-            // Se houver erro de rede/CORS que o Supabase captura
-            throw new Error(`Falha na conexão com o gateway: ${error.message || 'Sem resposta do servidor'}`);
-          }
-
-          if (data && data.success && data.payment) {
-            localStorage.setItem('current-payment', JSON.stringify({
-              ...data.payment,
-              orderId: orderData.order.id,
-              orderNsu: orderNsu,
-            }));
-            clearCart();
-            navigate('/pagamento');
-          } else {
-            throw new Error(data?.error || 'O gateway de pagamento não pôde processar o seu pedido no momento.');
-          }
-        } catch (funcErr) {
-          console.error('Erro ao invocar payment-processor:', funcErr);
-          throw funcErr;
+        if (orderData.payment) {
+          localStorage.setItem('current-payment', JSON.stringify({ 
+            ...orderData.payment, 
+            orderId: orderData.order.id, 
+            orderNsu, 
+            value: total 
+          }));
+          clearCart();
+          navigate('/pagamento');
+        } else {
+          throw new Error('Não foi possível gerar o código PIX. O pedido foi criado, tente pagar novamente mais tarde.');
         }
       } else {
-        // Card payment via InfinitePay
+        // InfinitePay
         const projectId = supabase.supabaseUrl.split('//')[1].split('.')[0];
         const redirectUrl = `${window.location.origin}/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&email=${encodeURIComponent(contactInfo.email)}`;
         const webhookUrl = `https://${projectId}.supabase.co/functions/v1/infinitepay-webhook`;
 
-        const checkoutItems = items.map(item => ({
-          productName: item.productName,
-          variationName: item.variationName,
-          price: item.price,
-          quantity: item.quantity,
-        }));
-
-        const formattedPhone = contactInfo.phone 
-          ? (contactInfo.phone.startsWith('+') ? contactInfo.phone : `+55${contactInfo.phone.replace(/\D/g, '')}`)
-          : undefined;
-
-        const { data, error } = await supabase.functions.invoke('infinitepay-checkout', {
+        const { data: payData, error: payError } = await supabase.functions.invoke('infinitepay-checkout', {
           body: {
-            items: checkoutItems,
-            orderNsu: orderNsu,
-            redirectUrl: redirectUrl,
-            webhookUrl: webhookUrl,
+            items: cartItems,
+            orderNsu,
+            redirectUrl,
+            webhookUrl,
             customer: {
-              name: `${contactInfo.firstName} ${contactInfo.lastName}`.trim() || undefined,
-              email: contactInfo.email || undefined,
-              phone: formattedPhone,
+              name: `${contactInfo.firstName} ${contactInfo.lastName}`.trim(),
+              email: contactInfo.email,
+              phone: contactInfo.phone ? (contactInfo.phone.startsWith('+') ? contactInfo.phone : `+55${contactInfo.phone.replace(/\D/g, '')}`) : undefined,
             },
           }
         });
 
-        if (error) {
-          throw new Error(error.message || 'Erro ao criar checkout');
-        }
+        if (payError) throw new Error(payError.message);
+        
+        const checkoutUrl = payData?.checkoutUrl || payData?.data?.url || payData?.data?.checkout_url;
 
-        console.log('InfinitePay response:', data);
-
-        if (data.success && data.checkoutUrl) {
-          localStorage.setItem('current-order', JSON.stringify({
-            orderId: orderData.order.id,
-            orderNsu: orderNsu,
-            items: items,
-            total: total,
-            createdAt: new Date().toISOString(),
+        if (checkoutUrl) {
+          localStorage.setItem('current-order', JSON.stringify({ 
+            orderId: orderData.order.id, 
+            orderNsu, 
+            items, 
+            total, 
+            createdAt: new Date().toISOString() 
           }));
           clearCart();
-          window.location.href = data.checkoutUrl;
-        } else if (data.success && data.data) {
-          const checkoutUrl = data.data.url || data.data.checkout_url || data.data.link;
-          if (checkoutUrl) {
-            localStorage.setItem('current-order', JSON.stringify({
-              orderId: orderData.order.id,
-              orderNsu: orderNsu,
-              items: items,
-              total: total,
-              createdAt: new Date().toISOString(),
-            }));
-            clearCart();
-            window.location.href = checkoutUrl;
-          } else {
-            console.error('No checkout URL in response:', data);
-            throw new Error('URL de checkout não encontrada na resposta');
-          }
+          window.location.href = checkoutUrl;
         } else {
-          throw new Error(data.error || 'Erro ao processar pagamento');
+          throw new Error('URL de pagamento não encontrada.');
         }
       }
-    } catch (error: unknown) {
-      console.error('Checkout error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao processar pagamento';
-      toast.error("Erro no pagamento", {
-        description: errorMessage,
+    } catch (err: unknown) {
+      console.error('Checkout error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar pagamento';
+      toast.error("Erro no pagamento", { 
+        description: errorMessage 
       });
     } finally {
       setIsProcessing(false);
