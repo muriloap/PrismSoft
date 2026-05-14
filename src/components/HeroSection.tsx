@@ -1,7 +1,11 @@
 import { MessageCircle, Headphones } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import heroBg from "@/assets/hero-bg.jpg";
+
 const HeroSection = () => {
+  const navigate = useNavigate();
+
   return <section className="relative min-h-[80vh] flex items-center overflow-hidden">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
@@ -44,7 +48,10 @@ const HeroSection = () => {
           <div className="flex flex-wrap gap-4 animate-slide-up" style={{
           animationDelay: "0.2s"
         }}>
-            <Button variant="hero" size="lg" className="gap-2" asChild>
+            <Button variant="hero" size="lg" className="gap-2 px-8" onClick={() => navigate("/store")}>
+              Ver Produtos
+            </Button>
+            <Button variant="heroOutline" size="lg" className="gap-2" asChild>
               <a href="https://discord.gg/HEKCFhaXwF" target="_blank" rel="noopener noreferrer">
                 <MessageCircle className="h-5 w-5" />
                 Comunidade

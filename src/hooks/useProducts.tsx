@@ -15,6 +15,7 @@ export interface Product {
   name: string;
   description: string | null;
   category: string;
+  category_id: string | null;
   image_url: string | null;
   rating: number;
   features: string[];
@@ -47,8 +48,9 @@ export const useProducts = () => {
       }));
 
       setProducts(parsedProducts);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -83,7 +85,7 @@ export const useProducts = () => {
       .from('products')
       .insert({
         ...product,
-        variations: product.variations as unknown as any,
+        variations: JSON.stringify(product.variations) as unknown as Json,
       })
       .select()
       .single();
@@ -98,7 +100,7 @@ export const useProducts = () => {
       .from('products')
       .update({
         ...updates,
-        variations: updates.variations as unknown as any,
+        variations: updates.variations ? JSON.stringify(updates.variations) as unknown as Json : undefined,
       })
       .eq('id', id)
       .select()

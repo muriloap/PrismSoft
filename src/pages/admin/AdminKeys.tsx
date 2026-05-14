@@ -122,8 +122,9 @@ const AdminKeys = () => {
       await addKeys(selectedProduct.id, selectedVariation, keysList);
       toast.success(`${keysList.length} key(s) adicionada(s)!`);
       setIsAddDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao adicionar keys");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message || "Erro ao adicionar keys");
     } finally {
       setIsSaving(false);
     }
@@ -137,8 +138,9 @@ const AdminKeys = () => {
       toast.success("Key excluída!");
       setIsDeleteDialogOpen(false);
       setKeyToDelete(null);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao excluir key");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message || "Erro ao excluir key");
     }
   };
 

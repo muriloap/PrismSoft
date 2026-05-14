@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Pencil, Trash2, Package, Loader2, Upload } from "lucid
 import { useAuth } from "@/hooks/useAuth";
 import { useAdmin } from "@/hooks/useAdmin";
 import { useProducts, Product, ProductVariation } from "@/hooks/useProducts";
+import { useCategories } from "@/hooks/useCategories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +60,7 @@ const emptyProduct = {
 const AdminProducts = () => {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
+  const { categories } = useCategories();
   const { products, loading: productsLoading, createProduct, updateProduct, deleteProduct } = useProducts();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -129,9 +131,9 @@ const AdminProducts = () => {
     });
   };
 
-  const handleVariationChange = (index: number, field: keyof ProductVariation, value: any) => {
+  const handleVariationChange = (index: number, field: keyof ProductVariation, value: string | number) => {
     const newVariations = [...formData.variations];
-    newVariations[index] = { ...newVariations[index], [field]: value };
+    newVariations[index] = { ...newVariations[index], [field]: value } as ProductVariation;
     setFormData({ ...formData, variations: newVariations });
   };
 
@@ -167,9 +169,10 @@ const AdminProducts = () => {
 
       setFormData({ ...formData, image_url: publicUrl });
       toast.success("Imagem enviada com sucesso!");
-    } catch (error: any) {
-      console.error("Erro no upload:", error);
-      toast.error(error.message || "Erro ao fazer upload da imagem");
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Erro no upload:", err);
+      toast.error(err.message || "Erro ao fazer upload da imagem");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -198,8 +201,9 @@ const AdminProducts = () => {
         toast.success("Produto criado!");
       }
       setIsDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao salvar produto");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message || "Erro ao salvar produto");
     } finally {
       setIsSaving(false);
     }
@@ -212,8 +216,9 @@ const AdminProducts = () => {
       await deleteProduct(selectedProduct.id);
       toast.success("Produto excluído!");
       setIsDeleteDialogOpen(false);
-    } catch (error: any) {
-      toast.error(error.message || "Erro ao excluir produto");
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message || "Erro ao excluir produto");
     }
   };
 
@@ -379,9 +384,9 @@ const AdminProducts = () => {
                     <SelectValue placeholder="Selecione uma categoria" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PRODUCT_CATEGORIES.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.name}>
+                        {cat.name}
                       </SelectItem>
                     ))}
                   </SelectContent>

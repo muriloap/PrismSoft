@@ -62,10 +62,13 @@ import NotFound from "./pages/NotFound";
 
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminProducts from "./pages/admin/AdminProducts";
+import AdminCategories from "./pages/admin/AdminCategories";
 import AdminKeys from "./pages/admin/AdminKeys";
 import AdminCoupons from "./pages/admin/AdminCoupons";
 import AdminUsers from "./pages/admin/AdminUsers";
 import AdminReports from "./pages/admin/AdminReports";
+import StorePage from "./pages/StorePage";
+import CategoryPage from "./pages/CategoryPage";
 
 const queryClient = new QueryClient();
 
@@ -94,10 +97,15 @@ const App = () => (
                 {/* Admin Routes */}
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/products" element={<AdminProducts />} />
+                <Route path="/admin/categories" element={<AdminCategories />} />
                 <Route path="/admin/keys" element={<AdminKeys />} />
                 <Route path="/admin/coupons" element={<AdminCoupons />} />
                 <Route path="/admin/users" element={<AdminUsers />} />
                 <Route path="/admin/reports" element={<AdminReports />} />
+
+                {/* Store Routes */}
+                <Route path="/store" element={<StorePage />} />
+                <Route path="/store/:slug" element={<CategoryPage />} />
 
                 {/* Fallback */}
                 <Route path="*" element={<NotFound />} />

@@ -94,19 +94,21 @@ const PaymentPage = () => {
         if (data.success && data.payment) {
           if (data.payment.isPaid) {
             setPaymentStatus('paid');
-            const storedPayment = localStorage.getItem('current-payment');
-            let orderNsu = '';
-            if (storedPayment) {
+            const storedPaymentDataStr = localStorage.getItem('current-payment');
+            let orderNsuStr = '';
+            if (storedPaymentDataStr) {
               try {
-                const parsed = JSON.parse(storedPayment);
-                orderNsu = parsed.orderNsu || '';
-              } catch {}
+                const parsed = JSON.parse(storedPaymentDataStr);
+                orderNsuStr = parsed.orderNsu || '';
+              } catch (e) {
+                console.error("Error parsing stored payment data:", e);
+              }
             }
             localStorage.removeItem('current-payment');
             
             // Redirect to success page with order info
-            if (orderNsu) {
-              navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&capture_method=pix`);
+            if (orderNsuStr) {
+              navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsuStr)}&capture_method=pix`);
             } else {
               toast({
                 title: "Pagamento confirmado!",
@@ -117,14 +119,14 @@ const PaymentPage = () => {
             setPaymentStatus('expired');
           }
         }
-      } catch (error) {
-        console.error('Error:', error);
+      } catch (err) {
+        console.error('Error:', err);
       }
     };
 
     const interval = setInterval(checkPayment, 5000);
     return () => clearInterval(interval);
-  }, [paymentData, paymentStatus, toast]);
+  }, [paymentData, paymentStatus, toast, navigate]);
 
   const handleCopyPixCode = async () => {
     if (!paymentData?.pixCode) return;
@@ -163,19 +165,21 @@ const PaymentPage = () => {
       if (data.success && data.payment) {
         if (data.payment.isPaid) {
           setPaymentStatus('paid');
-          const storedPayment = localStorage.getItem('current-payment');
-          let orderNsu = '';
-          if (storedPayment) {
+          const storedPaymentStr = localStorage.getItem('current-payment');
+          let capturedOrderNsu = '';
+          if (storedPaymentStr) {
             try {
-              const parsed = JSON.parse(storedPayment);
-              orderNsu = parsed.orderNsu || '';
-            } catch {}
+              const parsed = JSON.parse(storedPaymentStr);
+              capturedOrderNsu = parsed.orderNsu || '';
+            } catch (e) {
+              console.error("Error parsing stored payment:", e);
+            }
           }
           localStorage.removeItem('current-payment');
           
           // Redirect to success page with order info
-          if (orderNsu) {
-            navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(orderNsu)}&capture_method=pix`);
+          if (capturedOrderNsu) {
+            navigate(`/pagamento/sucesso?order_nsu=${encodeURIComponent(capturedOrderNsu)}&capture_method=pix`);
           } else {
             toast({
               title: "Pagamento confirmado!",

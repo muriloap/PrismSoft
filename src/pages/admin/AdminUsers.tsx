@@ -84,49 +84,7 @@ const AdminUsers = () => {
     }
   }, [isAdmin, adminLoading, user, navigate]);
 
-  useEffect(() => {
-    if (isAdmin) {
-      fetchUsers();
-
-      // Subscribe to real-time updates for profiles and user_roles
-      const profilesChannel = supabase
-        .channel('admin-profiles-updates')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'profiles'
-          },
-          () => {
-            fetchUsers();
-          }
-        )
-        .subscribe();
-
-      const rolesChannel = supabase
-        .channel('admin-roles-updates')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'user_roles'
-          },
-          () => {
-            fetchUsers();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(profilesChannel);
-        supabase.removeChannel(rolesChannel);
-      };
-    }
-  }, [isAdmin]);
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
       // Fetch profiles
@@ -138,16 +96,16 @@ const AdminUsers = () => {
       if (profilesError) throw profilesError;
 
       // Fetch user roles
-      let roles: any[] = [];
+      let roles: UserRole[] = [];
       try {
         const { data: rolesData, error: rolesError } = await supabase
           .from('user_roles')
           .select('user_id, role');
         
         if (rolesError && !rolesError.message.includes("schema cache")) throw rolesError;
-        if (rolesData) roles = rolesData;
+        if (rolesData) roles = rolesData as UserRole[];
       } catch (rolesErr) {
-        console.warn("Table user_roles missing, defaulting to empty roles list.");
+        console.warn("Table user_roles missing, defaulting to empty roles list:", rolesErr);
       }
 
       // Fetch orders to count per user
@@ -191,7 +149,49 @@ const AdminUsers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUsers();
+
+      // Subscribe to real-time updates for profiles and user_roles
+      const profilesChannel = supabase
+        .channel('admin-profiles-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'profiles'
+          },
+          () => {
+            fetchUsers();
+          }
+        )
+        .subscribe();
+
+      const rolesChannel = supabase
+        .channel('admin-roles-updates')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'user_roles'
+          },
+          () => {
+            fetchUsers();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(profilesChannel);
+        supabase.removeChannel(rolesChannel);
+      };
+    }
+  }, [isAdmin, fetchUsers]);
 
   const toggleRole = async (userId: string, role: AppRole, hasRole: boolean) => {
     if (userId === user?.id && role === 'admin') {

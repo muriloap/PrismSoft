@@ -2,14 +2,17 @@ import { ShoppingCart, Star, Loader2, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { useProducts } from "@/hooks/useProducts";
+import { useCategories } from "@/hooks/useCategories";
 import { useState } from "react";
-import { PRODUCT_CATEGORIES } from "@/constants/categories";
 
 const ProductsSection = () => {
   const navigate = useNavigate();
   const { products, loading } = useProducts();
+  const { categories } = useCategories();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   
+  const activeCategories = categories.filter(c => c.is_active);
+
   // Filter only active products
   const activeProducts = products.filter(p => {
     const isActive = p.is_active;
@@ -39,15 +42,15 @@ const ProductsSection = () => {
           >
             Todos
           </Button>
-          {PRODUCT_CATEGORIES.map((category) => (
+          {activeCategories.map((category) => (
             <Button
-              key={category}
-              variant={selectedCategory === category ? "hero" : "outline"}
+              key={category.id}
+              variant={selectedCategory === category.name ? "hero" : "outline"}
               size="sm"
-              onClick={() => setSelectedCategory(category)}
+              onClick={() => setSelectedCategory(category.name)}
               className="rounded-full"
             >
-              {category}
+              {category.name}
             </Button>
           ))}
         </div>

@@ -127,7 +127,7 @@ const CheckoutPage = () => {
       // Create order first to check stock and reserve
       // (supports legacy carts that stored numeric productId)
       const invalidItems = items.filter((i) => !isUuid(i.productId));
-      let slugToDbId = new Map<string, string>();
+      const slugToDbIdMap = new Map<string, string>();
 
       if (invalidItems.length > 0) {
         const slugs = Array.from(
@@ -143,7 +143,7 @@ const CheckoutPage = () => {
           if (productsError) throw productsError;
 
           (productsData || []).forEach((p) => {
-            slugToDbId.set(p.slug, p.id);
+            slugToDbIdMap.set(p.slug, p.id);
           });
         }
       }
@@ -151,7 +151,7 @@ const CheckoutPage = () => {
       const cartItems = items.map((item) => {
         const resolvedProductId = isUuid(item.productId)
           ? item.productId
-          : slugToDbId.get(item.productSlug) || item.productId;
+          : slugToDbIdMap.get(item.productSlug) || item.productId;
 
         return {
           productId: resolvedProductId,

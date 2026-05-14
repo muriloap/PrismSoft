@@ -57,6 +57,13 @@ const Header = () => {
             <span className="text-lg font-bold">Prism <span className="text-gradient">SysteM</span></span>
           </Link>
 
+          {/* Navigation */}
+          <nav className="hidden md:flex items-center gap-6">
+            <Link to="/" className="text-sm font-medium hover:text-purple-400 transition-colors">Início</Link>
+            <Link to="/store" className="text-sm font-medium hover:text-purple-400 transition-colors">Produtos</Link>
+            <Link to="/terms" className="text-sm font-medium hover:text-purple-400 transition-colors">Termos</Link>
+          </nav>
+
 
           {/* Actions */}
           <div className="flex items-center gap-3">

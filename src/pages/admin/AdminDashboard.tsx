@@ -71,7 +71,8 @@ const AdminDashboard = () => {
       } else {
         toast.success("Bem-vindo ao Painel");
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error("Login error:", error);
       toast.error("Erro de conexão.");
     } finally {
       setIsLoggingIn(false);
@@ -90,8 +91,9 @@ const AdminDashboard = () => {
       });
       if (error) throw error;
       toast.success("Email de recuperação enviado!");
-    } catch (error: any) {
-      toast.error(error.message);
+    } catch (error: unknown) {
+      const err = error as Error;
+      toast.error(err.message);
     }
   };
 
@@ -186,6 +188,13 @@ const AdminDashboard = () => {
       icon: Package,
       href: "/admin/products",
       color: "from-purple-500 to-indigo-500",
+    },
+    {
+      title: "Categorias",
+      description: "Gerenciar grupos de produtos",
+      icon: Tag,
+      href: "/admin/categories",
+      color: "from-amber-500 to-orange-500",
     },
     {
       title: "Keys & Estoque",

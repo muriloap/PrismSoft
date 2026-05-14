@@ -37,9 +37,10 @@ export const useProductKeys = (productId?: string, variationId?: string) => {
 
       if (error) throw error;
       setKeys(data as ProductKey[]);
-    } catch (err: any) {
-      setError(err);
-      console.error('Error fetching keys:', err);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setError(error);
+      console.error('Error fetching keys:', error);
     } finally {
       setLoading(false);
     }

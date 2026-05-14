@@ -152,8 +152,9 @@ const ProfilePage = () => {
 
       setAvatarUrl(newAvatarUrl);
       toast.success("Avatar atualizado!");
-    } catch (error: any) {
-      console.error("Error uploading avatar:", error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error uploading avatar:", err);
       toast.error("Erro ao fazer upload do avatar.");
     } finally {
       setIsUploadingAvatar(false);
@@ -178,8 +179,9 @@ const ProfilePage = () => {
 
       setAvatarUrl(null);
       toast.success("Avatar removido!");
-    } catch (error: any) {
-      console.error("Error removing avatar:", error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error removing avatar:", err);
       toast.error("Erro ao remover avatar.");
     } finally {
       setIsUploadingAvatar(false);
@@ -202,8 +204,9 @@ const ProfilePage = () => {
       }
 
       toast.success("Perfil atualizado!");
-    } catch (error: any) {
-      console.error("Error updating profile:", error);
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error updating profile:", err);
       toast.error("Erro ao atualizar perfil.");
     } finally {
       setIsSaving(false);
@@ -235,9 +238,10 @@ const ProfilePage = () => {
 
       toast.success("Código enviado! Verifique seu SMS.");
       setShowVerificationInput(true);
-    } catch (error: any) {
-      console.error("Error sending verification code:", error);
-      toast.error(error.message || "Erro ao enviar código.");
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error sending verification code:", err);
+      toast.error(err.message || "Erro ao enviar código.");
     } finally {
       setIsSendingCode(false);
     }
@@ -270,9 +274,10 @@ const ProfilePage = () => {
       setShowVerificationInput(false);
       setVerificationCode("");
       setPendingPhone("");
-    } catch (error: any) {
-      console.error("Error verifying code:", error);
-      toast.error(error.message || "Erro ao verificar código.");
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error verifying code:", err);
+      toast.error(err.message || "Erro ao verificar código.");
     } finally {
       setIsVerifyingCode(false);
     }
@@ -308,9 +313,10 @@ const ProfilePage = () => {
       toast.success("Senha alterada com sucesso!");
       setNewPassword("");
       setConfirmPassword("");
-    } catch (error: any) {
-      console.error("Error changing password:", error);
-      toast.error(error.message || "Erro ao alterar senha.");
+    } catch (error: unknown) {
+      const err = error as Error;
+      console.error("Error changing password:", err);
+      toast.error(err.message || "Erro ao alterar senha.");
     } finally {
       setIsChangingPassword(false);
     }

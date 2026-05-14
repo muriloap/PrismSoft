@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StockInfo {
@@ -7,25 +7,31 @@ interface StockInfo {
   available: number;
 }
 
+interface DBStockViewItem {
+  product_id: string;
+  variation_id: string;
+  available_count: number;
+}
+
 export const useRealTimeStock = (productId?: string) => {
   const [stockData, setStockData] = useState<StockInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchStock = async () => {
+  const fetchStock = useCallback(async () => {
     try {
       // Query the secure view that only exposes stock counts, not actual key values
       const { data, error } = await supabase
-        .from('product_stock_view' as any)
+        .from('product_stock_view')
         .select('product_id, variation_id, available_count');
 
       if (error) throw error;
 
       // Filter by productId if provided, then map to StockInfo format
       const filteredData = productId 
-        ? (data || []).filter((item: any) => item.product_id === productId)
-        : (data || []);
+        ? (data as unknown as DBStockViewItem[] || []).filter((item) => item.product_id === productId)
+        : (data as unknown as DBStockViewItem[] || []);
 
-      const stockList: StockInfo[] = filteredData.map((item: any) => ({
+      const stockList: StockInfo[] = filteredData.map((item) => ({
         productId: item.product_id,
         variationId: item.variation_id,
         available: Number(item.available_count)
@@ -37,7 +43,7 @@ export const useRealTimeStock = (productId?: string) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [productId]);
 
   useEffect(() => {
     // Always fetch when productId changes (including from undefined to a value)
@@ -65,7 +71,7 @@ export const useRealTimeStock = (productId?: string) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [productId]);
+  }, [productId, fetchStock]);
 
   const getStock = (productId: string, variationId: string): number => {
     const stock = stockData.find(
